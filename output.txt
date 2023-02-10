@@ -1,0 +1,63 @@
+overview/glossary.rst:48: [redirected permanently] https://azure.microsoft.com to https://azure.microsoft.com/en-us/
+governance/hsm_keys.rst:4: [redirected permanently] https://azure.microsoft.com/en-gb/services/key-vault to https://azure.microsoft.com/en-gb/products/key-vault/
+build_apps/auth/jwt.rst:4: [redirected permanently] https://aka.ms/IdentityPlatform to https://learn.microsoft.com/en-us/azure/active-directory/develop/
+contribute/build_setup.rst:41: [redirected permanently] https://code.visualstudio.com/docs/remote/containers to https://code.visualstudio.com/docs/devcontainers/containers
+build_apps/run_app.rst:4: [redirected permanently] https://curl.haxx.se/ to https://curl.se/
+contribute/build_setup.rst:41: [redirected permanently] https://code.visualstudio.com/docs/remote/containers#_quick-start-open-a-git-repository-or-github-pr-in-an-isolated-container-volume to https://code.visualstudio.com/docs/devcontainers/containers#_quick-start-open-a-git-repository-or-github-pr-in-an-isolated-container-volume
+overview/what_is_ccf.rst:9: [redirected permanently] https://ccf.dev/ to https://ccf.microsoft.com/
+governance/hsm_keys.rst:70: [redirected permanently] https://docs.microsoft.com/en-us/azure/key-vault/general/assign-access-policy-portal to https://learn.microsoft.com/en-us/azure/key-vault/general/assign-access-policy
+governance/hsm_keys.rst:8: [redirected permanently] https://docs.microsoft.com/en-us/azure/key-vault/general/quick-create-portal#create-a-vault to https://learn.microsoft.com/en-us/azure/key-vault/general/quick-create-portal#create-a-vault
+build_apps/auth/jwt.rst:143: [redirected permanently] https://docs.microsoft.com/en-us/azure/attestation/ to https://learn.microsoft.com/en-us/azure/attestation/
+contribute/create_vm.rst:4: [redirected permanently] https://docs.microsoft.com/en-us/azure/virtual-machines/dcv2-series to https://learn.microsoft.com/en-us/azure/virtual-machines/dcv2-series
+contribute/create_vm.rst:4: [redirected permanently] https://docs.microsoft.com/en-us/azure/virtual-machines/generation-2 to https://learn.microsoft.com/en-us/azure/virtual-machines/generation-2
+governance/hsm_keys.rst:8: [redirected permanently] https://docs.microsoft.com/en-us/cli/azure/install-azure-cli to https://learn.microsoft.com/en-us/cli/azure/install-azure-cli
+architecture/raft_tla.rst:40: [redirected permanently] https://docs.microsoft.com/en-us/azure/virtual-machines/hbv3-series to https://learn.microsoft.com/en-us/azure/virtual-machines/hbv3-series
+governance/hsm_keys.rst:19: [redirected permanently] https://docs.microsoft.com/en-us/cli/azure/keyvault/certificate?view=azure-cli-latest#az-keyvault-certificate-create to https://learn.microsoft.com/en-us/cli/azure/keyvault/certificate?view=azure-cli-latest#az-keyvault-certificate-create
+governance/hsm_keys.rst:34: [redirected permanently] https://docs.microsoft.com/en-us/cli/azure/keyvault/key?view=azure-cli-latest#az-keyvault-key-create to https://learn.microsoft.com/en-us/cli/azure/keyvault/key?view=azure-cli-latest#az-keyvault-key-create
+governance/hsm_keys.rst:55: [redirected permanently] https://docs.microsoft.com/en-us/rest/api/keyvault/keys/sign/sign to https://learn.microsoft.com/en-us/rest/api/keyvault/keys/sign/sign
+contribute/onboarding.rst:11: [redirected with Found] https://github.com/microsoft/CCF/issues/new/choose to https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FCCF%2Fissues%2Fnew%2Fchoose
+contribute/index.rst:7: [redirected with Found] https://github.com/microsoft/CCF/issues/new?assignees=&labels=bug&template=bug_report.md&title= to https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FCCF%2Fissues%2Fnew%3Fassignees%3D%26labels%3Dbug%26template%3Dbug_report.md%26title%3D
+contribute/index.rst:7: [redirected with Found] https://github.com/microsoft/CCF/issues/new?assignees=&labels=enhancement&template=feature_request.md&title= to https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fmicrosoft%2FCCF%2Fissues%2Fnew%3Fassignees%3D%26labels%3Denhancement%26template%3Dfeature_request.md%26title%3D
+contribute/build_ccf.rst:80: [redirected permanently] https://github.com/microsoft/CCF/tree/main/.azure-pipelines.yml to https://github.com/microsoft/CCF/blob/main/.azure-pipelines.yml
+contribute/build_setup.rst:41: [redirected permanently] https://github.com/microsoft/CCF/tree/main/.devcontainer/devcontainer.json to https://github.com/microsoft/CCF/blob/main/.devcontainer/devcontainer.json
+contribute/build_images.rst:10: [redirected permanently] https://github.com/microsoft/CCF/tree/main/.github/workflows/ci-containers.yml to https://github.com/microsoft/CCF/blob/main/.github/workflows/ci-containers.yml
+contribute/onboarding.rst:50: [redirected permanently] https://github.com/microsoft/CCF/tree/main//.azure-pipelines.yml to https://github.com/microsoft/CCF/blob/main/.azure-pipelines.yml
+contribute/onboarding.rst:56: [redirected permanently] https://github.com/microsoft/CCF/tree/main//.daily.yml to https://github.com/microsoft/CCF/blob/main/.daily.yml
+contribute/index.rst:6: [redirected permanently] https://github.com/microsoft/CCF/tree/main//.github/CONTRIBUTING.md to https://github.com/microsoft/CCF/blob/main/.github/CONTRIBUTING.md
+contribute/onboarding.rst:60: [redirected permanently] https://github.com/microsoft/CCF/tree/main//.azure-pipelines-gh-pages.yml to https://github.com/microsoft/CCF/blob/main/.azure-pipelines-gh-pages.yml
+contribute/onboarding.rst:58: [redirected permanently] https://github.com/microsoft/CCF/tree/main//.stress.yml to https://github.com/microsoft/CCF/blob/main/.stress.yml
+contribute/onboarding.rst:57: [redirected permanently] https://github.com/microsoft/CCF/tree/main//.multi-thread.yml to https://github.com/microsoft/CCF/blob/main/.multi-thread.yml
+overview/performance.rst:7: [redirected permanently] https://github.com/microsoft/CCF/tree/main//CCF-TECHNICAL-REPORT.pdf to https://github.com/microsoft/CCF/blob/main/CCF-TECHNICAL-REPORT.pdf
+governance/hsm_keys.rst:143: [redirected permanently] https://github.com/microsoft/CCF/tree/main//doc/governance/jws_to_der.py to https://github.com/microsoft/CCF/blob/main/doc/governance/jws_to_der.py
+operations/configuration.rst:12: [redirected permanently] https://github.com/microsoft/CCF/tree/main//samples/config/join_config.json to https://github.com/microsoft/CCF/blob/main/samples/config/join_config.json
+operations/configuration.rst:13: [redirected permanently] https://github.com/microsoft/CCF/tree/main//samples/config/recover_config.json to https://github.com/microsoft/CCF/blob/main/samples/config/recover_config.json
+operations/configuration.rst:10: [redirected permanently] https://github.com/microsoft/CCF/tree/main//samples/config/minimal_config.json to https://github.com/microsoft/CCF/blob/main/samples/config/minimal_config.json
+operations/configuration.rst:11: [redirected permanently] https://github.com/microsoft/CCF/tree/main//samples/config/start_config.json to https://github.com/microsoft/CCF/blob/main/samples/config/start_config.json
+overview/governance.rst:19: [redirected permanently] https://github.com/microsoft/CCF/tree/main//samples/constitutions/veto/resolve.js to https://github.com/microsoft/CCF/blob/main/samples/constitutions/veto/resolve.js
+overview/governance.rst:20: [redirected permanently] https://github.com/microsoft/CCF/tree/main//samples/constitutions/operator/resolve.js to https://github.com/microsoft/CCF/blob/main/samples/constitutions/operator/resolve.js
+overview/governance.rst:18: [redirected permanently] https://github.com/microsoft/CCF/tree/main//samples/constitutions/default/resolve.js to https://github.com/microsoft/CCF/blob/main/samples/constitutions/default/resolve.js
+audit/python_library.rst:103: [redirected permanently] https://github.com/microsoft/CCF/tree/main//tests/governance_history.py to https://github.com/microsoft/CCF/blob/main/tests/governance_history.py
+build_apps/run_app.rst:176: [redirected permanently] https://github.com/microsoft/CCF/tree/main//tests/test_install.sh to https://github.com/microsoft/CCF/blob/main/tests/test_install.sh
+contribute/build_ccf.rst:66: [redirected permanently] https://github.com/microsoft/CCF/tree/main//tests/tests.sh to https://github.com/microsoft/CCF/blob/main/tests/tests.sh
+contribute/build_images.rst:4: [redirected permanently] https://github.com/microsoft/CCF/tree/main/docker/ccf_ci to https://github.com/microsoft/CCF/blob/main/docker/ccf_ci
+governance/common_member_operations.rst:202: [redirected permanently] https://github.com/microsoft/CCF/tree/main/src/ds/x509_time_fmt.h to https://github.com/microsoft/CCF/blob/main/src/ds/x509_time_fmt.h
+operations/recovery.rst:8: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/infra/health_watcher.py to https://github.com/microsoft/CCF/blob/main/tests/infra/health_watcher.py
+build_apps/js_app_bundle.rst:95: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/js-app-bundle/app.json to https://github.com/microsoft/CCF/blob/main/tests/js-app-bundle/app.json
+build_apps/auth/jwt.rst:134: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/js-authentication/src/endpoints.js to https://github.com/microsoft/CCF/blob/main/tests/js-authentication/src/endpoints.js
+build_apps/js_app_bundle.rst:306: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/npm-app/build_bundle.js to https://github.com/microsoft/CCF/blob/main/tests/npm-app/build_bundle.js
+build_apps/js_app_bundle.rst:306: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/npm-app/package.json to https://github.com/microsoft/CCF/blob/main/tests/npm-app/package.json
+architecture/performance/analysis.rst:73: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/perf-system/analyzer/analyzer.py to https://github.com/microsoft/CCF/blob/main/tests/perf-system/analyzer/analyzer.py
+architecture/performance/analysis.rst:24: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/perf-system/analyzer/analyze_packages.py to https://github.com/microsoft/CCF/blob/main/tests/perf-system/analyzer/analyze_packages.py
+architecture/performance/analysis.rst:26: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/perf-system/analyzer/throughput_analysis.py to https://github.com/microsoft/CCF/blob/main/tests/perf-system/analyzer/throughput_analysis.py
+architecture/performance/generator.rst:7: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/perf-system/generator/generate_packages.py to https://github.com/microsoft/CCF/blob/main/tests/perf-system/generator/generate_packages.py
+architecture/performance/generator.rst:7: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/perf-system/generator/generator.py to https://github.com/microsoft/CCF/blob/main/tests/perf-system/generator/generator.py
+architecture/performance/generator.rst:7: [redirected permanently] https://github.com/microsoft/CCF/tree/main/tests/perf-system/generator/logging_generator.py to https://github.com/microsoft/CCF/blob/main/tests/perf-system/generator/logging_generator.py
+overview/faq.rst:21: [redirected permanently] https://github.com/openenclave/openenclave/tree/master/docs/GettingStartedDocs/Contributors/NonAccMachineSGXLinuxGettingStarted.md to https://github.com/openenclave/openenclave/blob/master/docs/GettingStartedDocs/Contributors/NonAccMachineSGXLinuxGettingStarted.md
+build_apps/get_started.rst:36: [redirected with Found] https://nodejs.org to https://nodejs.org/en/
+build_apps/js_app_bundle.rst:10: [redirected with Found] https://nodejs.org/ to https://nodejs.org/en/
+build_apps/auth/cert.rst:9: [redirected permanently] https://tools.ietf.org/html/draft-cavage-http-signatures-12 to https://datatracker.ietf.org/doc/html/draft-cavage-http-signatures-12
+governance/hsm_keys.rst:141: [redirected permanently] https://tools.ietf.org/html/rfc4648#section-5 to https://www.rfc-editor.org/rfc/rfc4648#section-5
+build_apps/auth/jwt.rst:6: [redirected permanently] https://tools.ietf.org/html/rfc6750 to https://www.rfc-editor.org/rfc/rfc6750
+build_apps/auth/jwt.rst:62: [redirected permanently] https://tools.ietf.org/html/rfc7517 to https://www.rfc-editor.org/rfc/rfc7517
+build_apps/auth/jwt.rst:4: [redirected permanently] https://tools.ietf.org/html/rfc7519 to https://www.rfc-editor.org/rfc/rfc7519
+governance/hsm_keys.rst:141: [redirected permanently] https://tools.ietf.org/html/rfc7518#section-3.4 to https://www.rfc-editor.org/rfc/rfc7518#section-3.4

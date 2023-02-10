@@ -1,0 +1,21 @@
+<map id="src/http/http_rpc_context.h" name="src/http/http_rpc_context.h">
+<area shape="rect" id="node1" title=" " alt="" coords="468,5,664,31"/>
+<area shape="rect" id="node2" href="$http2__parser_8h.html" title=" " alt="" coords="482,79,650,104"/>
+<area shape="rect" id="node3" href="$http2__session_8h.html" title=" " alt="" coords="467,152,644,177"/>
+<area shape="rect" id="node12" href="$http__session_8h.html" title=" " alt="" coords="274,152,443,177"/>
+<area shape="rect" id="node13" href="$jwt__key__auto__refresh_8h.html" title=" " alt="" coords="776,313,943,353"/>
+<area shape="rect" id="node14" href="$forwarder_8h.html" title=" " alt="" coords="1002,79,1181,104"/>
+<area shape="rect" id="node4" href="$rpc__sessions_8h.html" title=" " alt="" coords="261,233,456,258"/>
+<area shape="rect" id="node5" href="$src_2enclave_2enclave_8h.html" title=" " alt="" coords="925,563,1088,588"/>
+<area shape="rect" id="node7" href="$ccf__acme__client_8h.html" title=" " alt="" coords="503,321,702,346"/>
+<area shape="rect" id="node8" href="$node__state_8h.html" title=" " alt="" coords="533,409,698,434"/>
+<area shape="rect" id="node10" href="$quote__endorsements__client_8h.html" title=" " alt="" coords="32,313,250,353"/>
+<area shape="rect" id="node11" href="$resharing_8h.html" title=" " alt="" coords="274,321,429,346"/>
+<area shape="rect" id="node6" href="$enclave_2main_8cpp.html" title=" " alt="" coords="926,636,1086,661"/>
+<area shape="rect" id="node9" href="$gov__effects_8h.html" title=" " alt="" coords="737,489,929,515"/>
+<area shape="rect" id="node15" href="$frontend_8h.html" title=" " alt="" coords="1006,152,1178,177"/>
+<area shape="rect" id="node16" href="$acme__challenge__frontend_8h.html" title=" " alt="" coords="776,225,962,265"/>
+<area shape="rect" id="node17" href="$member__frontend_8h.html" title=" " alt="" coords="1078,401,1238,441"/>
+<area shape="rect" id="node18" href="$node__frontend_8h.html" title=" " alt="" coords="986,233,1197,258"/>
+<area shape="rect" id="node19" href="$user__frontend_8h.html" title=" " alt="" coords="1120,489,1327,515"/>
+</map>
