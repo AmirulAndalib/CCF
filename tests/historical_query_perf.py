@@ -167,6 +167,12 @@ def test_historical_query_range(network, args):
 
     entries = {}
     node = network.find_node_by_role(role=infra.network.NodeRole.BACKUP, log_capture=[])
+
+    # During this test enclave may get very busy due to increasing amount of stores fetched in
+    # memory, so tick messages may stack up, resulting in a delayed 'stop' msg processing, therefore
+    # leading to a delayed shutdown.
+    node.remote.remote.shutdown_timeout *= 10
+
     with node.client(common_headers={"authorization": f"Bearer {jwt}"}) as c:
         # Index is currently built lazily to avoid impacting other perf tests using the same app
         # So pre-fetch to ensure index is fully constructed
@@ -180,7 +186,6 @@ def test_historical_query_range(network, args):
 
         c.get("/node/memory")
 
-    # https://github.com/microsoft/CCF/issues/6126
     id_a_fetch_rate = len(entries[id_a]) / duration_a
     id_b_fetch_rate = len(entries[id_b]) / duration_b
     id_c_fetch_rate = len(entries[id_c]) / duration_c
@@ -193,7 +198,7 @@ def test_historical_query_range(network, args):
 
     bf = infra.bencher.Bencher()
     bf.set(
-        "historical_queries",
+        "Historical Queries",
         infra.bencher.Throughput(average_fetch_rate),
     )
 

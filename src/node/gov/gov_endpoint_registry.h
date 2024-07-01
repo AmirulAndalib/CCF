@@ -25,7 +25,7 @@ namespace ccf
 
   public:
     GovEndpointRegistry(
-      NetworkState& network_, ccfapp::AbstractNodeContext& context_) :
+      NetworkState& network_, ccf::AbstractNodeContext& context_) :
       CommonEndpointRegistry(get_actor_prefix(ActorsType::members), context_),
       network(network_),
       share_manager(network_.ledger_secrets)
@@ -48,6 +48,26 @@ namespace ccf
       return CommonEndpointRegistry::request_needs_root(rpc_ctx) ||
         (rpc_ctx.get_request_verb() == HTTP_POST &&
          rpc_ctx.get_request_path() == "/gov/members/proposals:create");
+    }
+
+    // Log these events on /gov frontend. Everything here is public, so
+    // safe to display in clear in the log
+    void handle_event_request_completed(
+      const ccf::endpoints::RequestCompletedEvent& event) override
+    {
+      GOV_INFO_FMT(
+        "RequestCompletedEvent: {} {} {} {}ms {} attempt(s)",
+        event.method,
+        event.dispatch_path,
+        event.status,
+        event.exec_time.count(),
+        event.attempts);
+    }
+
+    void handle_event_dispatch_failed(
+      const ccf::endpoints::DispatchFailedEvent& event) override
+    {
+      GOV_INFO_FMT("DispatchFailedEvent: {} {}", event.method, event.status);
     }
 
     void api_endpoint(ccf::endpoints::ReadOnlyEndpointContext& ctx) override

@@ -34,7 +34,7 @@ namespace ccf
       to_host(writer_factory.create_writer_to_outside())
     {}
 
-    virtual void send_request(http::Request&& request) = 0;
+    virtual void send_request(::http::Request&& request) = 0;
 
     virtual void connect(
       const std::string& hostname,
@@ -43,7 +43,7 @@ namespace ccf
       const HandleErrorCallback e = nullptr)
     {
       RINGBUFFER_WRITE_MESSAGE(
-        tls::tls_connect, to_host, client_session_id, hostname, service);
+        ::tls::tls_connect, to_host, client_session_id, hostname, service);
       handle_data_cb = f;
       handle_error_cb = e;
     }

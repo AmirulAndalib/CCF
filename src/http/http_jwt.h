@@ -32,9 +32,12 @@ namespace http
   {
     size_t nbf;
     size_t exp;
+    std::string iss;
+    std::optional<std::string> tid;
   };
-  DECLARE_JSON_TYPE(JwtPayload)
-  DECLARE_JSON_REQUIRED_FIELDS(JwtPayload, nbf, exp)
+  DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(JwtPayload)
+  DECLARE_JSON_REQUIRED_FIELDS(JwtPayload, nbf, exp, iss);
+  DECLARE_JSON_OPTIONAL_FIELDS(JwtPayload, tid)
 
   class JwtVerifier
   {
@@ -59,11 +62,11 @@ namespace http
         return false;
       }
       auto auth_scheme = auth_header_value.substr(0, next_space);
-      if (auth_scheme != auth::BEARER_AUTH_SCHEME)
+      if (auth_scheme != ccf::http::auth::BEARER_AUTH_SCHEME)
       {
         error_reason = fmt::format(
           "Authorization header does not have {} scheme",
-          auth::BEARER_AUTH_SCHEME);
+          ccf::http::auth::BEARER_AUTH_SCHEME);
         return false;
       }
       auth_header_value = auth_header_value.substr(next_space + 1);
@@ -98,9 +101,9 @@ namespace http
       std::string_view payload_b64url =
         token.substr(first_dot + 1, payload_size);
       std::string_view signature_b64url = token.substr(second_dot + 1);
-      auto header_raw = crypto::raw_from_b64url(header_b64url);
-      auto payload_raw = crypto::raw_from_b64url(payload_b64url);
-      auto signature_raw = crypto::raw_from_b64url(signature_b64url);
+      auto header_raw = ccf::crypto::raw_from_b64url(header_b64url);
+      auto payload_raw = ccf::crypto::raw_from_b64url(payload_b64url);
+      auto signature_raw = ccf::crypto::raw_from_b64url(signature_b64url);
       auto signed_content = token.substr(0, second_dot);
       nlohmann::json header;
       nlohmann::json payload;
@@ -125,7 +128,7 @@ namespace http
       {
         header_typed = header.get<JwtHeader>();
       }
-      catch (const JsonParseError& e)
+      catch (const ccf::JsonParseError& e)
       {
         error_reason =
           fmt::format("JWT header does not follow schema: {}", e.describe());
@@ -136,7 +139,7 @@ namespace http
       {
         payload_typed = payload.get<JwtPayload>();
       }
-      catch (const JsonParseError& e)
+      catch (const ccf::JsonParseError& e)
       {
         error_reason = fmt::format(
           "JWT payload is missing required field: {}", e.describe());
@@ -153,12 +156,13 @@ namespace http
     }
 
     static std::optional<Token> extract_token(
-      const http::HeaderMap& headers, std::string& error_reason)
+      const ccf::http::HeaderMap& headers, std::string& error_reason)
     {
-      const auto auth_it = headers.find(headers::AUTHORIZATION);
+      const auto auth_it = headers.find(ccf::http::headers::AUTHORIZATION);
       if (auth_it == headers.end())
       {
-        error_reason = fmt::format("Missing {} header", headers::AUTHORIZATION);
+        error_reason =
+          fmt::format("Missing {} header", ccf::http::headers::AUTHORIZATION);
         return std::nullopt;
       }
       std::string_view token = auth_it->second;
@@ -171,14 +175,14 @@ namespace http
     }
 
     static bool validate_token_signature(
-      const Token& token, const crypto::VerifierPtr& verifier)
+      const Token& token, const ccf::crypto::VerifierPtr& verifier)
     {
       return verifier->verify(
         (uint8_t*)token.signed_content.data(),
         token.signed_content.size(),
         token.signature.data(),
         token.signature.size(),
-        crypto::MDType::SHA256);
+        ccf::crypto::MDType::SHA256);
     }
   };
 }

@@ -5,19 +5,19 @@
 #include "ccf/crypto/rsa_key_pair.h"
 #include "ccf/endpoints/authentication/all_of_auth.h"
 #include "ccf/historical_queries_adapter.h"
+#include "ccf/js/common_context.h"
 #include "ccf/js/core/context.h"
 #include "ccf/js/core/wrapped_property_enum.h"
 #include "ccf/js/extensions/ccf/consensus.h"
-#include "ccf/js/extensions/ccf/converters.h"
-#include "ccf/js/extensions/ccf/crypto.h"
 #include "ccf/js/extensions/ccf/historical.h"
 #include "ccf/js/extensions/ccf/host.h"
 #include "ccf/js/extensions/ccf/kv.h"
 #include "ccf/js/extensions/ccf/request.h"
 #include "ccf/js/extensions/ccf/rpc.h"
-#include "ccf/js/extensions/console.h"
-#include "ccf/js/extensions/math/random.h"
-#include "ccf/js/modules.h"
+#include "ccf/js/interpreter_cache_interface.h"
+#include "ccf/js/modules/chained_module_loader.h"
+#include "ccf/js/modules/kv_bytecode_module_loader.h"
+#include "ccf/js/modules/kv_module_loader.h"
 #include "ccf/js/named_auth_policies.h"
 #include "ccf/node/host_processes_interface.h"
 #include "ccf/node/rpc_context_impl.h"
@@ -25,7 +25,6 @@
 #include "ccf/version.h"
 #include "enclave/enclave_time.h"
 #include "js/global_class_ids.h"
-#include "js/interpreter_cache_interface.h"
 #include "service/tables/endpoints.h"
 
 #include <memory>
@@ -34,16 +33,16 @@
 #include <stdexcept>
 #include <vector>
 
-namespace ccfapp
+namespace ccf
 {
   using namespace std;
-  using namespace kv;
+  using namespace ccf::kv;
   using namespace ccf;
 
   class JSHandlers : public UserEndpointRegistry
   {
   private:
-    ccfapp::AbstractNodeContext& context;
+    ccf::AbstractNodeContext& context;
     std::shared_ptr<ccf::js::AbstractInterpreterCache> interpreter_cache =
       nullptr;
 
@@ -145,8 +144,17 @@ namespace ccfapp
       // Make the heap and stack limits safe while we init the runtime
       ctx.runtime().reset_runtime_options();
 
-      JS_SetModuleLoaderFunc(
-        ctx.runtime(), nullptr, js::js_app_module_loader, &endpoint_ctx.tx);
+      ccf::js::modules::ModuleLoaders sub_loaders = {
+        std::make_shared<js::modules::KvBytecodeModuleLoader>(
+          endpoint_ctx.tx.ro<ccf::ModulesQuickJsBytecode>(
+            ccf::Tables::MODULES_QUICKJS_BYTECODE),
+          endpoint_ctx.tx.ro<ccf::ModulesQuickJsVersion>(
+            ccf::Tables::MODULES_QUICKJS_VERSION)),
+        std::make_shared<js::modules::KvModuleLoader>(
+          endpoint_ctx.tx.ro<ccf::Modules>(ccf::Tables::MODULES))};
+      auto module_loader = std::make_shared<js::modules::ChainedModuleLoader>(
+        std::move(sub_loaders));
+      ctx.set_module_loader(std::move(module_loader));
 
       // Extensions with a dependency on this endpoint context (invocation),
       // which must be removed after execution.
@@ -180,10 +188,14 @@ namespace ccfapp
       try
       {
         const auto& props = endpoint->properties;
-        auto module_val =
-          js::load_app_module(ctx, props.js_module.c_str(), &endpoint_ctx.tx);
+        auto module_val = ctx.get_module(props.js_module);
+        if (!module_val.has_value())
+        {
+          throw std::runtime_error(
+            fmt::format("Unable to load module: {}", props.js_module));
+        }
         export_func = ctx.get_exported_function(
-          module_val, props.js_function, props.js_module);
+          *module_val, props.js_function, props.js_module);
       }
       catch (const std::exception& exc)
       {
@@ -198,16 +210,22 @@ namespace ccfapp
       auto request = request_extension->create_request_obj(
         ctx, endpoint->full_uri_path, endpoint_ctx, this);
 
+      auto options = endpoint_ctx.tx.ro<ccf::JSEngine>(ccf::Tables::JSENGINE)
+                       ->get()
+                       .value_or(ccf::JSRuntimeOptions());
+
       auto val = ctx.call_with_rt_options(
         export_func,
         {request},
-        &endpoint_ctx.tx,
+        options,
         ccf::js::core::RuntimeLimitsPolicy::NONE);
 
       for (auto extension : local_extensions)
       {
         ctx.remove_extension(extension);
       }
+
+      ctx.set_module_loader(nullptr);
 
       const auto& rt = ctx.runtime();
 
@@ -222,12 +240,12 @@ namespace ccfapp
 
         auto [reason, trace] = ctx.error_message();
 
-        if (rt.log_exception_details)
+        if (options.log_exception_details)
         {
           CCF_APP_FAIL("{}: {}", reason, trace.value_or("<no trace>"));
         }
 
-        if (rt.return_exception_details)
+        if (options.return_exception_details)
         {
           std::vector<nlohmann::json> details = {
             ODataJSExceptionDetails{ccf::errors::JSException, reason, trace}};
@@ -284,7 +302,7 @@ namespace ccfapp
           if (array_buffer)
           {
             endpoint_ctx.rpc_ctx->set_response_header(
-              http::headers::CONTENT_TYPE,
+              ccf::http::headers::CONTENT_TYPE,
               http::headervalues::contenttype::OCTET_STREAM);
             response_body =
               std::vector<uint8_t>(array_buffer, array_buffer + buf_size);
@@ -295,21 +313,21 @@ namespace ccfapp
             if (response_body_js.is_str())
             {
               endpoint_ctx.rpc_ctx->set_response_header(
-                http::headers::CONTENT_TYPE,
+                ccf::http::headers::CONTENT_TYPE,
                 http::headervalues::contenttype::TEXT);
               str = ctx.to_str(response_body_js);
             }
             else
             {
               endpoint_ctx.rpc_ctx->set_response_header(
-                http::headers::CONTENT_TYPE,
+                ccf::http::headers::CONTENT_TYPE,
                 http::headervalues::contenttype::JSON);
               auto rval = ctx.json_stringify(response_body_js);
               if (rval.is_exception())
               {
                 auto [reason, trace] = ctx.error_message();
 
-                if (rt.log_exception_details)
+                if (options.log_exception_details)
                 {
                   CCF_APP_FAIL(
                     "Failed to convert return value to JSON:{} {}",
@@ -317,7 +335,7 @@ namespace ccfapp
                     trace.value_or("<no trace>"));
                 }
 
-                if (rt.return_exception_details)
+                if (options.return_exception_details)
                 {
                   std::vector<nlohmann::json> details = {
                     ODataJSExceptionDetails{
@@ -346,7 +364,7 @@ namespace ccfapp
             {
               auto [reason, trace] = ctx.error_message();
 
-              if (rt.log_exception_details)
+              if (options.log_exception_details)
               {
                 CCF_APP_FAIL(
                   "Failed to convert return value to JSON:{} {}",
@@ -354,7 +372,7 @@ namespace ccfapp
                   trace.value_or("<no trace>"));
               }
 
-              if (rt.return_exception_details)
+              if (options.return_exception_details)
               {
                 std::vector<nlohmann::json> details = {ODataJSExceptionDetails{
                   ccf::errors::JSException, reason, trace}};
@@ -481,18 +499,7 @@ namespace ccfapp
       // Install dependency-less (ie reusable) extensions on interpreters _at
       // creation_, rather than on every run
       js::extensions::Extensions extensions;
-      // override Math.random
-      extensions.emplace_back(
-        std::make_shared<ccf::js::extensions::MathRandomExtension>());
-      // add console.[debug|log|...]
-      extensions.emplace_back(
-        std::make_shared<ccf::js::extensions::ConsoleExtension>());
-      // add ccf.[strToBuf|bufToStr|...]
-      extensions.emplace_back(
-        std::make_shared<ccf::js::extensions::ConvertersExtension>());
-      // add ccf.crypto.*
-      extensions.emplace_back(
-        std::make_shared<ccf::js::extensions::CryptoExtension>());
+
       // add ccf.consensus.*
       extensions.emplace_back(
         std::make_shared<ccf::js::extensions::ConsensusExtension>(this));
@@ -507,7 +514,8 @@ namespace ccfapp
 
       interpreter_cache->set_interpreter_factory(
         [extensions](ccf::js::TxAccess access) {
-          auto interpreter = std::make_shared<js::core::Context>(access);
+          // CommonContext also adds many extensions
+          auto interpreter = std::make_shared<js::CommonContext>(access);
 
           for (auto extension : extensions)
           {
@@ -584,7 +592,7 @@ namespace ccfapp
     }
 
     ccf::endpoints::EndpointDefinitionPtr find_endpoint(
-      kv::Tx& tx, ccf::RpcContext& rpc_ctx) override
+      ccf::kv::Tx& tx, ccf::RpcContext& rpc_ctx) override
     {
       const auto method = rpc_ctx.get_method();
       const auto verb = rpc_ctx.get_request_verb();
@@ -677,7 +685,7 @@ namespace ccfapp
     }
 
     std::set<RESTVerb> get_allowed_verbs(
-      kv::Tx& tx, const ccf::RpcContext& rpc_ctx) override
+      ccf::kv::Tx& tx, const ccf::RpcContext& rpc_ctx) override
     {
       const auto method = rpc_ctx.get_method();
 
@@ -743,7 +751,7 @@ namespace ccfapp
 
     // Since we do our own dispatch within the default handler, report the
     // supported methods here
-    void build_api(nlohmann::json& document, kv::ReadOnlyTx& tx) override
+    void build_api(nlohmann::json& document, ccf::kv::ReadOnlyTx& tx) override
     {
       UserEndpointRegistry::build_api(document, tx);
 
@@ -785,9 +793,9 @@ namespace ccfapp
   };
 
   std::unique_ptr<ccf::endpoints::EndpointRegistry> make_user_endpoints_impl(
-    ccfapp::AbstractNodeContext& context)
+    ccf::AbstractNodeContext& context)
   {
     return std::make_unique<JSHandlers>(context);
   }
 
-} // namespace ccfapp
+} // namespace ccf

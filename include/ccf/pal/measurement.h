@@ -72,7 +72,7 @@ namespace ccf::pal
     }
     else
     {
-      throw JsonParseError(fmt::format(
+      throw ccf::JsonParseError(fmt::format(
         "Attestation measurement should be hex-encoded string: {}", j.dump()));
     }
   }
@@ -143,7 +143,7 @@ namespace ccf::pal
   DECLARE_JSON_REQUIRED_FIELDS(PlatformAttestationMeasurement, data);
 }
 
-namespace kv::serialisers
+namespace ccf::kv::serialisers
 {
   template <size_t N>
   struct BlitSerialiser<ccf::pal::AttestationMeasurement<N>>
@@ -159,7 +159,7 @@ namespace kv::serialisers
       const SerialisedEntry& data)
     {
       ccf::pal::AttestationMeasurement<N> ret;
-      ds::from_hex(std::string(data.data(), data.end()), ret.measurement);
+      ccf::ds::from_hex(std::string(data.data(), data.end()), ret.measurement);
       return ret;
     }
   };

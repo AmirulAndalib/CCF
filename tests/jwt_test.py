@@ -10,6 +10,7 @@ import infra.proc
 import infra.net
 import infra.crypto
 import infra.e2e_args
+import infra.proposal
 import suite.test_requirements as reqs
 import infra.jwt_issuer
 from infra.runner import ConcurrentRunner
@@ -38,6 +39,21 @@ def get_jwt_keys(args, node):
         return body["keys"]
 
 
+def set_issuer_with_keys(network, primary, issuer, kids):
+    with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as metadata_fp:
+        json.dump({"issuer": issuer.name}, metadata_fp)
+        metadata_fp.flush()
+        network.consortium.set_jwt_issuer(primary, metadata_fp.name)
+
+    with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as jwks_fp:
+        json.dump(issuer.create_jwks_for_kids(kids), jwks_fp)
+        jwks_fp.flush()
+
+        network.consortium.set_jwt_public_signing_keys(
+            primary, issuer.name, jwks_fp.name
+        )
+
+
 @reqs.description("Refresh JWT issuer")
 def test_refresh_jwt_issuer(network, args):
     assert network.jwt_issuer.server, "JWT server is not started"
@@ -49,28 +65,143 @@ def test_refresh_jwt_issuer(network, args):
     return network
 
 
+@reqs.description("Multiple JWT issuers can't share same kid different pem")
+def test_jwt_mulitple_issuers_same_kids_different_pem(network, args):
+    primary, _ = network.find_nodes()
+
+    issuer1 = infra.jwt_issuer.JwtIssuer("https://example.issuer1")
+    issuer2 = infra.jwt_issuer.JwtIssuer("https://example.issuer2")
+
+    set_issuer_with_keys(network, primary, issuer1, ["kid1"])
+    set_issuer_with_keys(network, primary, issuer2, ["kid1"])
+
+    network.consortium.remove_jwt_issuer(primary, issuer1.name)
+    network.consortium.remove_jwt_issuer(primary, issuer2.name)
+
+
+@reqs.description("Multiple JWT issuers can share same kid same pem")
+def test_jwt_mulitple_issuers_same_kids_same_pem(network, args):
+    primary, _ = network.find_nodes()
+
+    issuer1 = infra.jwt_issuer.JwtIssuer("https://example.issuer1")
+
+    issuer2 = infra.jwt_issuer.JwtIssuer("https://example.issuer2")
+    issuer2.cert_pem = issuer1.cert_pem
+
+    set_issuer_with_keys(network, primary, issuer1, ["kid1"])
+    set_issuer_with_keys(network, primary, issuer2, ["kid1"])
+
+    network.consortium.remove_jwt_issuer(primary, issuer1.name)
+    network.consortium.remove_jwt_issuer(primary, issuer2.name)
+
+
+@reqs.description("Issuer constraint gets overwritten properly for same issuer+kid")
+def test_jwt_same_issuer_constraint_overwritten(network, args):
+    primary, _ = network.find_nodes()
+
+    issuer = infra.jwt_issuer.JwtIssuer("https://example.issuer")
+    keys = issuer.create_jwks_for_kids(["kid1"])
+
+    with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as metadata_fp:
+        json.dump({"issuer": issuer.name}, metadata_fp)
+        metadata_fp.flush()
+        network.consortium.set_jwt_issuer(primary, metadata_fp.name)
+
+    with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as jwks_fp:
+        json.dump(keys, jwks_fp)
+        jwks_fp.flush()
+        network.consortium.set_jwt_public_signing_keys(
+            primary, issuer.name, jwks_fp.name
+        )
+
+    service_keys = get_jwt_keys(args, primary)
+    assert service_keys["kid1"][0]["constraint"] == issuer.name
+
+    new_constraint = "https://example.issuer/very/specific"
+    keys["keys"][0]["issuer"] = new_constraint
+    with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as jwks_fp:
+        json.dump(keys, jwks_fp)
+        jwks_fp.flush()
+        network.consortium.set_jwt_public_signing_keys(
+            primary, issuer.name, jwks_fp.name
+        )
+
+    service_keys = get_jwt_keys(args, primary)
+    assert service_keys["kid1"][0]["constraint"] == new_constraint
+
+    network.consortium.remove_jwt_issuer(primary, issuer.name)
+
+
+@reqs.description("Only able to set keys with issuer constraints matching the url")
+def test_jwt_issuer_domain_match(network, args):
+    """Check domains match. Additional subdomains permitted. For example, https://limited.facebook.com
+    may provide keys with issuer constraint https://facebook.com."""
+
+    primary, _ = network.find_nodes()
+
+    issuer = infra.jwt_issuer.JwtIssuer("https://trusted.issuer.com/something")
+    keys = issuer.create_jwks_for_kids(["kid1"])
+
+    with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as metadata_fp:
+        json.dump({"issuer": issuer.name}, metadata_fp)
+        metadata_fp.flush()
+        network.consortium.set_jwt_issuer(primary, metadata_fp.name)
+
+    with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as jwks_fp:
+        json.dump(keys, jwks_fp)
+        jwks_fp.flush()
+        network.consortium.set_jwt_public_signing_keys(
+            primary, issuer.name, jwks_fp.name
+        )
+
+    service_keys = get_jwt_keys(args, primary)
+    assert service_keys["kid1"][0]["issuer"] == issuer.name
+
+    keys["keys"][0]["issuer"] = "https://issuer.com"
+
+    with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as jwks_fp:
+        json.dump(keys, jwks_fp)
+        jwks_fp.flush()
+        network.consortium.set_jwt_public_signing_keys(
+            primary, issuer.name, jwks_fp.name
+        )
+
+    garbage = ["", "garbage", "https://another.com", "https://issuer.com.domain"]
+    for constraint in garbage:
+        with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as jwks_fp:
+            keys["keys"][0]["issuer"] = constraint
+            json.dump(keys, jwks_fp)
+            jwks_fp.flush()
+            try:
+                network.consortium.set_jwt_public_signing_keys(
+                    primary, issuer.name, jwks_fp.name
+                )
+            except infra.proposal.ProposalNotAccepted:
+                pass
+            else:
+                assert False, f"Constraint {constraint} must not be allowed"
+
+    network.consortium.remove_jwt_issuer(primary, issuer.name)
+
+
 @reqs.description("Multiple JWT issuers registered at once")
 def test_jwt_endpoint(network, args):
     primary, _ = network.find_nodes()
 
     keys = {
-        infra.jwt_issuer.JwtIssuer("issuer1"): ["issuer1_kid1", "issuer1_kid2"],
-        infra.jwt_issuer.JwtIssuer("issuer2"): ["issuer2_kid1", "issuer2_kid2"],
+        infra.jwt_issuer.JwtIssuer("https://example.issuer1"): [
+            "issuer1_kid1",
+            "issuer1_kid2",
+        ],
+        infra.jwt_issuer.JwtIssuer("https://example.issuer2"): [
+            "issuer2_kid1",
+            "issuer2_kid2",
+        ],
     }
 
     LOG.info("Register JWT issuer with multiple kids")
     for issuer, kids in keys.items():
-        with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as metadata_fp:
-            json.dump({"issuer": issuer.name}, metadata_fp)
-            metadata_fp.flush()
-            network.consortium.set_jwt_issuer(primary, metadata_fp.name)
-
-        with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as jwks_fp:
-            json.dump(issuer.create_jwks_for_kids(kids), jwks_fp)
-            jwks_fp.flush()
-            network.consortium.set_jwt_public_signing_keys(
-                primary, issuer.name, jwks_fp.name
-            )
+        set_issuer_with_keys(network, primary, issuer, kids)
 
     LOG.info("Check that JWT endpoint returns all keys and issuers")
     service_issuers = get_jwt_issuers(args, primary)
@@ -80,16 +211,19 @@ def test_jwt_endpoint(network, args):
         assert issuer.name in service_issuers, service_issuers
         for kid in kids:
             assert kid in service_keys, service_keys
-            assert service_keys[kid]["issuer"] == issuer.name
-            assert service_keys[kid]["certificate"] == issuer.cert_pem
+            assert service_keys[kid][0]["issuer"] == issuer.name
+            assert service_keys[kid][0]["constraint"] == issuer.name
+            assert service_keys[kid][0]["certificate"] == issuer.cert_pem
 
 
 @reqs.description("JWT without key policy")
 def test_jwt_without_key_policy(network, args):
     primary, _ = network.find_nodes()
 
-    issuer = infra.jwt_issuer.JwtIssuer("my_issuer")
+    issuer = infra.jwt_issuer.JwtIssuer("https://example.issuer")
     kid = "my_kid_not_key_policy"
+
+    network.consortium.remove_jwt_issuer(primary, issuer.name)
 
     LOG.info("Try to add JWT signing key without matching issuer")
     with tempfile.NamedTemporaryFile(prefix="ccf", mode="w+") as jwks_fp:
@@ -132,7 +266,7 @@ def test_jwt_without_key_policy(network, args):
         )
 
         keys = get_jwt_keys(args, primary)
-        stored_cert = keys[kid]["certificate"]
+        stored_cert = keys[kid][0]["certificate"]
 
         assert stored_cert == issuer.cert_pem, "input cert is not equal to stored cert"
 
@@ -151,7 +285,7 @@ def test_jwt_without_key_policy(network, args):
         network.consortium.set_jwt_issuer(primary, metadata_fp.name)
 
         keys = get_jwt_keys(args, primary)
-        stored_cert = keys[kid]["certificate"]
+        stored_cert = keys[kid][0]["certificate"]
 
         assert stored_cert == issuer.cert_pem, "input cert is not equal to stored cert"
 
@@ -195,7 +329,9 @@ def test_jwt_with_sgx_key_policy(network, args):
         oe_cert_pem = f.read()
 
     kid = "my_kid_with_policy"
-    issuer = infra.jwt_issuer.JwtIssuer("my_issuer_with_policy", oe_cert_pem)
+    issuer = infra.jwt_issuer.JwtIssuer(
+        "https://example.issuer_with_policy", oe_cert_pem
+    )
 
     oesign = os.path.join(args.oe_binary, "oesign")
     oeutil_enc = os.path.join(args.oe_binary, "oeutil_enc.signed")
@@ -295,8 +431,8 @@ def test_jwt_with_sgx_key_filter(network, args):
     with open(oe_cert_path, encoding="utf-8") as f:
         oe_cert_pem = f.read()
 
-    oe_issuer = infra.jwt_issuer.JwtIssuer("oe_issuer", oe_cert_pem)
-    non_oe_issuer = infra.jwt_issuer.JwtIssuer("non_oe_issuer_name")
+    oe_issuer = infra.jwt_issuer.JwtIssuer("https://example.oe_issuer", oe_cert_pem)
+    non_oe_issuer = infra.jwt_issuer.JwtIssuer("https://example.non_oe_issuer")
 
     oe_kid = "oe_kid"
     non_oe_kid = "non_oe_kid"
@@ -335,7 +471,7 @@ def check_kv_jwt_key_matches(args, network, kid, cert_pem):
         # Necessary to get an AssertionError if the key is not found yet,
         # when used from with_timeout()
         assert kid in latest_jwt_signing_keys
-        stored_cert = latest_jwt_signing_keys[kid]["certificate"]
+        stored_cert = latest_jwt_signing_keys[kid][0]["certificate"]
         assert stored_cert == cert_pem, "input cert is not equal to stored cert"
 
 
@@ -344,30 +480,20 @@ def check_kv_jwt_keys_not_empty(args, network, issuer):
     latest_jwt_signing_keys = get_jwt_keys(args, primary)
 
     for _, data in latest_jwt_signing_keys.items():
-        if issuer == data["issuer"]:
-            return
+        for key in data:
+            if key["issuer"] == issuer:
+                return
 
     assert False, "No keys for issuer"
 
 
-def get_jwt_refresh_endpoint_metrics(network) -> dict:
-    primary, _ = network.find_nodes()
-    with primary.client(network.consortium.get_any_active_member().local_id) as c:
-        r = c.get("/node/api/metrics")
-        m = next(
-            v
-            for v in r.body.json()["metrics"]
-            if v["path"] == "jwt_keys/refresh" and v["method"] == "POST"
-        )
-        assert m["errors"] == 0, m["errors"]  # not used in jwt refresh endpoint
-        m["successes"] = m["calls"] - m["failures"]
-        return m
-
-
-def get_jwt_metrics(network) -> dict:
-    primary, _ = network.find_nodes()
-    with primary.client(network.consortium.get_any_active_member().local_id) as c:
-        r = c.get("/node/jwt_metrics")
+def get_jwt_refresh_endpoint_metrics(primary) -> dict:
+    # Note that these metrics are local to a node. So if the primary changes, or
+    # a different node has processed jwt_keys/refresh, you may not see the values
+    # you expect
+    with primary.client() as c:
+        r = c.get("/node/jwt_keys/refresh/metrics")
+        assert r.status_code == 200, r
         return r.body.json()
 
 
@@ -424,15 +550,11 @@ def test_jwt_key_auto_refresh(network, args):
                 timeout=5,
             )
 
-        LOG.info("Check that JWT refresh has attempts and successes")
-        m = get_jwt_metrics(network)
-        assert m["attempts"] > 0, m["attempts"]
-        assert m["successes"] > 0, m["successes"]
-
-        LOG.info("Check that JWT refresh endpoint has no failures")
-        m = get_jwt_refresh_endpoint_metrics(network)
-        assert m["failures"] == 0, m["failures"]
-        assert m["successes"] > 0, m["successes"]
+        LOG.info("Check that JWT refresh has attempts and successes and no failures")
+        m = get_jwt_refresh_endpoint_metrics(primary)
+        assert m["attempts"] > 0, m
+        assert m["successes"] > 0, m
+        assert m["failures"] == 0, m
 
         LOG.info("Serve invalid JWKS")
         server.jwks = {"foo": "bar"}
@@ -440,14 +562,14 @@ def test_jwt_key_auto_refresh(network, args):
         LOG.info("Check that JWT refresh endpoint has some failures")
 
         def check_has_failures():
-            m = get_jwt_refresh_endpoint_metrics(network)
-            assert m["failures"] > 0, m["failures"]
+            m = get_jwt_refresh_endpoint_metrics(primary)
+            assert m["failures"] > 0, m
 
         with_timeout(check_has_failures, timeout=5)
 
         LOG.info("Check that JWT refresh has fewer successes than attempts")
-        m = get_jwt_metrics(network)
-        assert m["attempts"] > m["successes"], m["attempts"]
+        m = get_jwt_refresh_endpoint_metrics(primary)
+        assert m["attempts"] > m["successes"], m
 
     LOG.info("Restart OpenID endpoint server with new keys")
     kid2 = "the_kid_2"
@@ -506,7 +628,7 @@ def test_jwt_key_auto_refresh_entries(network, args):
             )
 
         LOG.info("Check that JWT refresh has attempts and successes")
-        m = get_jwt_metrics(network)
+        m = get_jwt_refresh_endpoint_metrics(primary)
         attempts = m["attempts"]
         successes = m["successes"]
         assert attempts > 0, attempts
@@ -515,7 +637,7 @@ def test_jwt_key_auto_refresh_entries(network, args):
         # Wait long enough for at least one refresh to take place
         time.sleep(args.jwt_key_refresh_interval_s)
 
-        m = get_jwt_metrics(network)
+        m = get_jwt_refresh_endpoint_metrics(primary)
         assert m["attempts"] > attempts, m["attempts"]
         assert m["successes"] > successes, m["successes"]
 
@@ -531,8 +653,8 @@ def test_jwt_key_auto_refresh_entries(network, args):
             for tx in chunk:
                 txid = TxID(tx.gcm_header.view, tx.gcm_header.seqno)
                 tables = tx.get_public_domain().get_tables()
-                if "public:ccf.gov.jwt.public_signing_keys" in tables:
-                    pub_keys = tables["public:ccf.gov.jwt.public_signing_keys"]
+                if "public:ccf.gov.jwt.public_signing_keys_metadata" in tables:
+                    pub_keys = tables["public:ccf.gov.jwt.public_signing_keys_metadata"]
                     if kid.encode() in pub_keys:
                         if last_key_refresh is None:
                             LOG.info(f"Refresh found for kid: {kid} at {txid}")
@@ -591,7 +713,7 @@ def test_jwt_key_initial_refresh(network, args):
         )
 
         LOG.info("Check that JWT refresh endpoint has no failures")
-        m = get_jwt_refresh_endpoint_metrics(network)
+        m = get_jwt_refresh_endpoint_metrics(primary)
         assert m["failures"] == 0, m["failures"]
         assert m["successes"] > 0, m["successes"]
 
@@ -668,6 +790,10 @@ def run_auto(args):
         args.nodes, args.binary_dir, args.debug_nodes, args.perf_nodes, pdb=args.pdb
     ) as network:
         network.start_and_open(args)
+        test_jwt_mulitple_issuers_same_kids_different_pem(network, args)
+        test_jwt_mulitple_issuers_same_kids_same_pem(network, args)
+        test_jwt_same_issuer_constraint_overwritten(network, args)
+        test_jwt_issuer_domain_match(network, args)
         test_jwt_endpoint(network, args)
         test_jwt_without_key_policy(network, args)
         if args.enclave_platform == "sgx":

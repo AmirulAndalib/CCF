@@ -109,54 +109,6 @@
         },
         "type": "array"
       },
-      "EndpointMetrics": {
-        "properties": {
-          "metrics": {
-            "$ref": "#/components/schemas/EndpointMetricsEntry_array"
-          }
-        },
-        "required": [
-          "metrics"
-        ],
-        "type": "object"
-      },
-      "EndpointMetricsEntry": {
-        "properties": {
-          "calls": {
-            "$ref": "#/components/schemas/uint64"
-          },
-          "errors": {
-            "$ref": "#/components/schemas/uint64"
-          },
-          "failures": {
-            "$ref": "#/components/schemas/uint64"
-          },
-          "method": {
-            "$ref": "#/components/schemas/string"
-          },
-          "path": {
-            "$ref": "#/components/schemas/string"
-          },
-          "retries": {
-            "$ref": "#/components/schemas/uint64"
-          }
-        },
-        "required": [
-          "path",
-          "method",
-          "calls",
-          "errors",
-          "failures",
-          "retries"
-        ],
-        "type": "object"
-      },
-      "EndpointMetricsEntry_array": {
-        "items": {
-          "$ref": "#/components/schemas/EndpointMetricsEntry"
-        },
-        "type": "array"
-      },
       "EndpointProperties": {
         "properties": {
           "authn_policies": {
@@ -349,11 +301,6 @@
             "$ref": "#/components/schemas/boolean"
           }
         },
-        "required": [
-          "max_heap_bytes",
-          "max_stack_bytes",
-          "max_execution_time_ms"
-        ],
         "type": "object"
       },
       "JwtIssuerKeyFilter": {
@@ -408,6 +355,12 @@
           "cert"
         ],
         "type": "object"
+      },
+      "KeyIdInfo_array": {
+        "items": {
+          "$ref": "#/components/schemas/KeyIdInfo"
+        },
+        "type": "array"
       },
       "MDType": {
         "enum": [
@@ -692,6 +645,22 @@
               },
               "redirections": {
                 "properties": {
+                  "to_backup": {
+                    "properties": {
+                      "kind": {
+                        "enum": [
+                          "NodeByRole",
+                          "StaticAddress"
+                        ],
+                        "type": "string"
+                      },
+                      "target": {}
+                    },
+                    "required": [
+                      "kind"
+                    ],
+                    "type": "object"
+                  },
                   "to_primary": {
                     "properties": {
                       "kind": {
@@ -815,6 +784,22 @@
                 },
                 "redirections": {
                   "properties": {
+                    "to_backup": {
+                      "properties": {
+                        "kind": {
+                          "enum": [
+                            "NodeByRole",
+                            "StaticAddress"
+                          ],
+                          "type": "string"
+                        },
+                        "target": {}
+                      },
+                      "required": [
+                        "kind"
+                      ],
+                      "type": "object"
+                    },
                     "to_primary": {
                       "properties": {
                         "kind": {
@@ -862,6 +847,30 @@
           "Retired"
         ],
         "type": "string"
+      },
+      "OpenIDJWKMetadata": {
+        "properties": {
+          "cert": {
+            "$ref": "#/components/schemas/base64string"
+          },
+          "constraint": {
+            "$ref": "#/components/schemas/string"
+          },
+          "issuer": {
+            "$ref": "#/components/schemas/string"
+          }
+        },
+        "required": [
+          "cert",
+          "issuer"
+        ],
+        "type": "object"
+      },
+      "OpenIDJWKMetadata_array": {
+        "items": {
+          "$ref": "#/components/schemas/OpenIDJWKMetadata"
+        },
+        "type": "array"
       },
       "Pem": {
         "type": "string"
@@ -991,7 +1000,8 @@
       "RedirectionStrategy": {
         "enum": [
           "none",
-          "to_primary"
+          "to_primary",
+          "to_backup"
         ],
         "type": "string"
       },
@@ -1262,9 +1272,15 @@
         },
         "type": "object"
       },
-      "string_to_KeyIdInfo": {
+      "string_to_KeyIdInfo_array": {
         "additionalProperties": {
-          "$ref": "#/components/schemas/KeyIdInfo"
+          "$ref": "#/components/schemas/KeyIdInfo_array"
+        },
+        "type": "object"
+      },
+      "string_to_OpenIDJWKMetadata_array": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/OpenIDJWKMetadata_array"
         },
         "type": "object"
       },
@@ -1335,7 +1351,7 @@
   "info": {
     "description": "This API is used to submit and query proposals which affect CCF's public governance tables.",
     "title": "CCF Governance API",
-    "version": "4.1.6"
+    "version": "4.1.8"
   },
   "openapi": "3.0.0",
   "paths": {
@@ -1416,29 +1432,6 @@
           }
         },
         "summary": "OpenAPI schema",
-        "x-ccf-forwarding": {
-          "$ref": "#/components/x-ccf-forwarding/sometimes"
-        }
-      }
-    },
-    "/gov/api/metrics": {
-      "get": {
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EndpointMetrics"
-                }
-              }
-            },
-            "description": "Default response description"
-          },
-          "default": {
-            "$ref": "#/components/responses/default"
-          }
-        },
-        "summary": "Usage metrics for endpoints",
         "x-ccf-forwarding": {
           "$ref": "#/components/x-ccf-forwarding/sometimes"
         }
@@ -1552,7 +1545,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/string_to_KeyIdInfo"
+                  "$ref": "#/components/schemas/string_to_KeyIdInfo_array"
                 }
               }
             },
@@ -1562,7 +1555,7 @@
             "$ref": "#/components/responses/default"
           }
         },
-        "summary": "This endpoint is deprecated. It is replaced by /gov/kv/jwt/public_signing_keys, /gov/kv/jwt/public_signing_key_issue, and /gov/kv/jwt/issuers endpoints.",
+        "summary": "This endpoint is deprecated. It is replaced by /gov/kv/jwt/public_signing_keys_metadata and /gov/kv/jwt/issuers endpoints.",
         "x-ccf-forwarding": {
           "$ref": "#/components/x-ccf-forwarding/always"
         }
@@ -1744,6 +1737,28 @@
         }
       }
     },
+    "/gov/kv/jwt/public_signing_key": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/string_to_base64string"
+                }
+              }
+            },
+            "description": "Default response description"
+          },
+          "default": {
+            "$ref": "#/components/responses/default"
+          }
+        },
+        "x-ccf-forwarding": {
+          "$ref": "#/components/x-ccf-forwarding/sometimes"
+        }
+      }
+    },
     "/gov/kv/jwt/public_signing_key_issuer": {
       "get": {
         "responses": {
@@ -1766,14 +1781,14 @@
         }
       }
     },
-    "/gov/kv/jwt/public_signing_keys": {
+    "/gov/kv/jwt/public_signing_keys_metadata": {
       "get": {
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/string_to_base64string"
+                  "$ref": "#/components/schemas/string_to_OpenIDJWKMetadata_array"
                 }
               }
             },

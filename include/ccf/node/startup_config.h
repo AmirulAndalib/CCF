@@ -22,14 +22,14 @@ struct CCFConfig
   // 2**24.5 as per RFC8446 Section 5.5
   size_t node_to_node_message_limit = 23'726'566;
 
-  consensus::Configuration consensus = {};
+  ccf::consensus::Configuration consensus = {};
   ccf::NodeInfoNetwork network = {};
 
   struct NodeCertificateInfo
   {
     std::string subject_name = "CN=CCF Node";
     std::vector<std::string> subject_alt_names = {};
-    crypto::CurveID curve_id = crypto::CurveID::SECP384R1;
+    ccf::crypto::CurveID curve_id = ccf::crypto::CurveID::SECP384R1;
     size_t initial_validity_days = 1;
 
     bool operator==(const NodeCertificateInfo&) const = default;
@@ -39,7 +39,7 @@ struct CCFConfig
   struct LedgerSignatures
   {
     size_t tx_count = 5000;
-    ds::TimeString delay = {"1000ms"};
+    ccf::ds::TimeString delay = {"1000ms"};
 
     bool operator==(const LedgerSignatures&) const = default;
   };
@@ -47,7 +47,7 @@ struct CCFConfig
 
   struct JWT
   {
-    ds::TimeString key_refresh_interval = {"30min"};
+    ccf::ds::TimeString key_refresh_interval = {"30min"};
 
     bool operator==(const JWT&) const = default;
   };
@@ -102,7 +102,7 @@ struct StartupConfig : CCFConfig
   struct Join
   {
     ccf::NodeInfoNetwork::NetAddress target_rpc_address;
-    ds::TimeString retry_timeout = {"1000ms"};
+    ccf::ds::TimeString retry_timeout = {"1000ms"};
     std::vector<uint8_t> service_cert = {};
     bool follow_redirect = true;
   };

@@ -288,12 +288,13 @@ namespace asynchost
         total_len = sizeof(positions_offset_header_t);
         auto len = total_file_size - total_len;
 
-        kv::SerialisedEntryHeader entry_header = {};
+        ccf::kv::SerialisedEntryHeader entry_header = {};
         size_t current_idx = start_idx;
-        while (len >= kv::serialised_entry_header_size)
+        while (len >= ccf::kv::serialised_entry_header_size)
         {
           if (
-            fread(&entry_header, kv::serialised_entry_header_size, 1, file) !=
+            fread(
+              &entry_header, ccf::kv::serialised_entry_header_size, 1, file) !=
             1)
           {
             LOG_FAIL_FMT(
@@ -303,7 +304,7 @@ namespace asynchost
             return;
           }
 
-          len -= kv::serialised_entry_header_size;
+          len -= ccf::kv::serialised_entry_header_size;
 
           const auto& entry_size = entry_header.size;
           if (len < entry_size)
@@ -330,7 +331,7 @@ namespace asynchost
 
           current_idx++;
           positions.push_back(total_len);
-          total_len += (kv::serialised_entry_header_size + entry_size);
+          total_len += (ccf::kv::serialised_entry_header_size + entry_size);
         }
         completed = false;
       }
@@ -1297,9 +1298,10 @@ namespace asynchost
       TimeBoundLogger log_if_slow(fmt::format(
         "Writing ledger entry - {} bytes, committable={}", size, committable));
 
-      auto header = serialized::peek<kv::SerialisedEntryHeader>(data, size);
+      auto header =
+        serialized::peek<ccf::kv::SerialisedEntryHeader>(data, size);
 
-      if (header.flags & kv::EntryFlags::FORCE_LEDGER_CHUNK_BEFORE)
+      if (header.flags & ccf::kv::EntryFlags::FORCE_LEDGER_CHUNK_BEFORE)
       {
         LOG_TRACE_FMT(
           "Forcing ledger chunk before entry as required by the entry header "
@@ -1314,7 +1316,7 @@ namespace asynchost
       }
 
       bool force_chunk_after =
-        header.flags & kv::EntryFlags::FORCE_LEDGER_CHUNK_AFTER;
+        header.flags & ccf::kv::EntryFlags::FORCE_LEDGER_CHUNK_AFTER;
       if (force_chunk_after)
       {
         if (!committable)
@@ -1501,12 +1503,12 @@ namespace asynchost
       size_t from_idx,
       size_t to_idx,
       std::optional<LedgerReadResult>&& read_result,
-      consensus::LedgerRequestPurpose purpose)
+      ::consensus::LedgerRequestPurpose purpose)
     {
       if (read_result.has_value())
       {
         RINGBUFFER_WRITE_MESSAGE(
-          consensus::ledger_entry_range,
+          ::consensus::ledger_entry_range,
           to_enclave,
           from_idx,
           read_result->end_idx,
@@ -1516,7 +1518,7 @@ namespace asynchost
       else
       {
         RINGBUFFER_WRITE_MESSAGE(
-          consensus::ledger_no_entry_range,
+          ::consensus::ledger_no_entry_range,
           to_enclave,
           from_idx,
           to_idx,
@@ -1528,16 +1530,18 @@ namespace asynchost
       messaging::Dispatcher<ringbuffer::Message>& disp)
     {
       DISPATCHER_SET_MESSAGE_HANDLER(
-        disp, consensus::ledger_init, [this](const uint8_t* data, size_t size) {
-          auto idx = serialized::read<consensus::Index>(data, size);
+        disp,
+        ::consensus::ledger_init,
+        [this](const uint8_t* data, size_t size) {
+          auto idx = serialized::read<::consensus::Index>(data, size);
           auto recovery_start_index =
-            serialized::read<consensus::Index>(data, size);
+            serialized::read<::consensus::Index>(data, size);
           init(idx, recovery_start_index);
         });
 
       DISPATCHER_SET_MESSAGE_HANDLER(
         disp,
-        consensus::ledger_append,
+        ::consensus::ledger_append,
         [this](const uint8_t* data, size_t size) {
           auto committable = serialized::read<bool>(data, size);
           write_entry(data, size, committable);
@@ -1545,9 +1549,9 @@ namespace asynchost
 
       DISPATCHER_SET_MESSAGE_HANDLER(
         disp,
-        consensus::ledger_truncate,
+        ::consensus::ledger_truncate,
         [this](const uint8_t* data, size_t size) {
-          auto idx = serialized::read<consensus::Index>(data, size);
+          auto idx = serialized::read<::consensus::Index>(data, size);
           auto recovery_mode = serialized::read<bool>(data, size);
           truncate(idx);
           if (recovery_mode)
@@ -1558,23 +1562,23 @@ namespace asynchost
 
       DISPATCHER_SET_MESSAGE_HANDLER(
         disp,
-        consensus::ledger_commit,
+        ::consensus::ledger_commit,
         [this](const uint8_t* data, size_t size) {
-          auto idx = serialized::read<consensus::Index>(data, size);
+          auto idx = serialized::read<::consensus::Index>(data, size);
           commit(idx);
         });
 
       DISPATCHER_SET_MESSAGE_HANDLER(
-        disp, consensus::ledger_open, [this](const uint8_t*, size_t) {
+        disp, ::consensus::ledger_open, [this](const uint8_t*, size_t) {
           complete_recovery();
         });
 
       DISPATCHER_SET_MESSAGE_HANDLER(
         disp,
-        consensus::ledger_get_range,
+        ::consensus::ledger_get_range,
         [&](const uint8_t* data, size_t size) {
           auto [from_idx, to_idx, purpose] =
-            ringbuffer::read_message<consensus::ledger_get_range>(data, size);
+            ringbuffer::read_message<::consensus::ledger_get_range>(data, size);
 
           // Ledger entries response has metadata so cap total entries size
           // accordingly

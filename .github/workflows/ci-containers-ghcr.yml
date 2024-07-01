@@ -1,0 +1,81 @@
+name: "Build and Publish Build Containers to GHCR"
+
+on:
+  push:
+    tags:
+      - "build/*"
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: "Build and Publish Build Containers"
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for default image
+        id: meta_default
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/ci/default
+
+      - name: Extract metadata (tags, labels) for SGX image
+        id: meta_sgx
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/ci/sgx
+
+      - name: Build and push default container
+        id: push_default
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/ccf_ci
+          build-args: |
+            platform=snp
+            clang_version=15
+          push: true
+          tags: ${{ steps.meta_default.outputs.tags }}
+          labels: ${{ steps.meta_default.outputs.labels }}
+
+      - name: Build and push SGX container
+        id: push_sgx
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/ccf_ci
+          build-args: |
+            platform=sgx
+          push: true
+          tags: ${{ steps.meta_sgx.outputs.tags }}
+          labels: ${{ steps.meta_sgx.outputs.labels }}
+
+      - name: Attest default container
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/ci/default
+          subject-digest: ${{ steps.push_default.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest SGX container
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/ci/sgx
+          subject-digest: ${{ steps.push_sgx.outputs.digest }}
+          push-to-registry: true

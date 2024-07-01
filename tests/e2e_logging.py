@@ -35,6 +35,7 @@ from infra.member import AckException
 from types import MappingProxyType
 import threading
 import copy
+import programmability
 import e2e_common_endpoints
 
 from loguru import logger as LOG
@@ -405,14 +406,11 @@ def test_remove(network, args):
         _, log_id = network.txs.get_log_id(txid)
         network.txs.delete(log_id, priv=priv)
         r = network.txs.request(log_id, priv=priv)
-        if args.package in ["libjs_generic"]:
-            check(r, result={"error": "No such key"})
-        else:
-            check(
-                r,
-                error=lambda status, msg: status == http.HTTPStatus.NOT_FOUND.value
-                and msg.json()["error"]["code"] == "ResourceNotFound",
-            )
+        check(
+            r,
+            error=lambda status, msg: status == http.HTTPStatus.NOT_FOUND.value
+            and msg.json()["error"]["code"] == "ResourceNotFound",
+        )
 
     return network
 
@@ -446,17 +444,11 @@ def test_clear(network, args):
                 )
                 for log_id in log_ids:
                     get_r = c.get(f"{resource}?id={log_id}")
-                    if args.package in ["libjs_generic"]:
-                        check(
-                            get_r,
-                            result={"error": "No such key"},
-                        )
-                    else:
-                        check(
-                            get_r,
-                            error=lambda status, msg: status
-                            == http.HTTPStatus.NOT_FOUND.value,
-                        )
+                    check(
+                        get_r,
+                        error=lambda status, msg: status
+                        == http.HTTPStatus.NOT_FOUND.value,
+                    )
 
     # Make sure no-one else is still looking for these
     network.txs.clear()
@@ -763,68 +755,6 @@ def test_raw_text(network, args):
     assert r.status_code == http.HTTPStatus.OK.value
     r = network.txs.request(log_id, priv=True)
     assert msg in r.body.json()["msg"], r
-
-    primary, _ = network.find_primary()
-    with primary.client("user0") as c:
-        r = c.get("/app/api/metrics")
-        assert get_metrics(r, "log/private/raw_text/{id}", "POST")["calls"] > 0
-
-    return network
-
-
-@reqs.description("Read metrics")
-@reqs.supports_methods("/app/api/metrics")
-def test_metrics(network, args):
-    primary, _ = network.find_primary()
-
-    calls = 0
-    errors = 0
-    with primary.client("user0") as c:
-        r = c.get("/app/api/metrics")
-        m = get_metrics(r, "api/metrics", "GET")
-        calls = m["calls"]
-        errors = m["errors"]
-
-    with primary.client("user0") as c:
-        r = c.get("/app/api/metrics")
-        assert get_metrics(r, "api/metrics", "GET")["calls"] == calls + 1
-        r = c.get("/app/api/metrics")
-        assert get_metrics(r, "api/metrics", "GET")["calls"] == calls + 2
-
-    with primary.client() as c:
-        r = c.get("/app/api/metrics", headers={"accept": "nonsense"})
-        assert r.status_code == http.HTTPStatus.BAD_REQUEST.value
-
-    with primary.client() as c:
-        r = c.get("/app/api/metrics")
-        assert get_metrics(r, "api/metrics", "GET")["errors"] == errors + 1
-
-    calls = 0
-    with primary.client("user0") as c:
-        r = c.get("/app/api/metrics")
-        calls = get_metrics(r, "log/public", "POST", {"calls": 0})["calls"]
-
-    network.txs.issue(
-        network=network,
-        number_txs=1,
-    )
-
-    with primary.client("user0") as c:
-        r = c.get("/app/api/metrics")
-        assert get_metrics(r, "log/public", "POST")["calls"] == calls + 1
-
-    with primary.client("user0") as c:
-        r = c.get("/app/no_such_endpoint")
-        assert r.status_code == http.HTTPStatus.NOT_FOUND.value
-        r = c.get("/app/api/metrics")
-        assert (
-            get_metrics(
-                r,
-                "no_such_endpoint",
-                "GET",
-            )
-            is None
-        )
 
     return network
 
@@ -2011,45 +1941,105 @@ def run(args):
     ) as network:
         network.start_and_open(args)
 
-        test_basic_constraints(network, args)
-        test(network, args)
-        test_remove(network, args)
-        test_clear(network, args)
-        test_record_count(network, args)
-        # HTTP2 doesn't support forwarding
-        if not args.http2:
-            test_forwarding_frontends(network, args)
-            test_forwarding_frontends_without_app_prefix(network, args)
-            test_long_lived_forwarding(network, args)
-        test_user_data_ACL(network, args)
-        test_cert_prefix(network, args)
-        test_anonymous_caller(network, args)
-        test_multi_auth(network, args)
-        test_custom_auth(network, args)
-        test_custom_auth_safety(network, args)
-        test_raw_text(network, args)
-        test_historical_query(network, args)
-        test_historical_query_range(network, args)
-        test_view_history(network, args)
-        test_metrics(network, args)
-        test_empty_path(network, args)
-        if args.package == "samples/apps/logging/liblogging":
-            # Local-commit lambda is currently only supported in C++
-            test_post_local_commit_failure(network, args)
-            # Custom indexers currently only supported in C++
-            test_committed_index(network, args)
-        test_liveness(network, args)
-        test_rekey(network, args)
-        test_liveness(network, args)
-        test_random_receipts(network, args, False)
-        if args.package == "samples/apps/logging/liblogging":
-            test_receipts(network, args)
-            test_historical_query_sparse(network, args)
-        test_historical_receipts(network, args)
-        test_historical_receipts_with_claims(network, args)
-        test_genesis_receipt(network, args)
-        if args.package == "samples/apps/logging/liblogging":
-            test_etags(network, args)
+        run_main_tests(network, args)
+
+
+def run_app_space_js(args):
+    txs = app.LoggingTxs("user0")
+    with infra.network.network(
+        args.nodes,
+        args.binary_dir,
+        args.debug_nodes,
+        args.perf_nodes,
+        pdb=args.pdb,
+        txs=txs,
+    ) as network:
+        network.start_and_open(args)
+
+        # Make user0 admin, so it can install custom endpoints
+        primary, _ = network.find_nodes()
+        user = network.users[0]
+        network.consortium.set_user_data(
+            primary, user.service_id, user_data={"isAdmin": True}
+        )
+
+        with primary.client() as c:
+            parent_dir = os.path.normpath(
+                os.path.join(os.path.dirname(__file__), os.path.pardir)
+            )
+            logging_js_dir = os.path.join(
+                parent_dir,
+                "samples",
+                "apps",
+                "logging",
+                "js",
+            )
+            bundle = network.consortium.read_bundle_from_dir(logging_js_dir)
+            signed_bundle = programmability.sign_payload(
+                network.identity(user.local_id), "custom_endpoints", bundle
+            )
+            r = c.put(
+                "/app/custom_endpoints",
+                body=signed_bundle,
+                headers={"Content-Type": "application/cose"},
+            )
+
+            assert r.status_code == http.HTTPStatus.NO_CONTENT.value, r.status_code
+
+            # Also modify the runtime options to log and return errors, to aid debugging
+            options = {"log_exception_details": True, "return_exception_details": True}
+            signed_options = programmability.sign_payload(
+                network.identity(user.local_id), "runtime_options", options
+            )
+            r = c.patch(
+                "/app/custom_endpoints/runtime_options",
+                signed_options,
+                headers={"Content-Type": "application/cose"},
+            )
+            assert r.status_code == http.HTTPStatus.OK.value, r.status_code
+
+        run_main_tests(network, args)
+
+
+def run_main_tests(network, args):
+    test_basic_constraints(network, args)
+    test(network, args)
+    test_remove(network, args)
+    test_clear(network, args)
+    test_record_count(network, args)
+    # HTTP2 doesn't support forwarding
+    if not args.http2:
+        test_forwarding_frontends(network, args)
+        test_forwarding_frontends_without_app_prefix(network, args)
+        test_long_lived_forwarding(network, args)
+    test_user_data_ACL(network, args)
+    test_cert_prefix(network, args)
+    test_anonymous_caller(network, args)
+    test_multi_auth(network, args)
+    test_custom_auth(network, args)
+    test_custom_auth_safety(network, args)
+    test_raw_text(network, args)
+    test_historical_query(network, args)
+    test_historical_query_range(network, args)
+    test_view_history(network, args)
+    test_empty_path(network, args)
+    if args.package == "samples/apps/logging/liblogging":
+        # Local-commit lambda is currently only supported in C++
+        test_post_local_commit_failure(network, args)
+        # Custom indexers currently only supported in C++
+        test_committed_index(network, args)
+    test_liveness(network, args)
+    test_rekey(network, args)
+    test_liveness(network, args)
+    test_random_receipts(network, args, False)
+    if args.package == "samples/apps/logging/liblogging":
+        test_receipts(network, args)
+        test_historical_query_sparse(network, args)
+    test_historical_receipts(network, args)
+    test_historical_receipts_with_claims(network, args)
+    test_genesis_receipt(network, args)
+    if args.package == "samples/apps/logging/liblogging":
+        test_etags(network, args)
 
 
 def run_parsing_errors(args):
@@ -2075,6 +2065,15 @@ if __name__ == "__main__":
         "js",
         run,
         package="libjs_generic",
+        nodes=infra.e2e_args.max_nodes(cr.args, f=0),
+        initial_user_count=4,
+        initial_member_count=2,
+    )
+
+    cr.add(
+        "app_space_js",
+        run_app_space_js,
+        package="samples/apps/programmability/libprogrammability",
         nodes=infra.e2e_args.max_nodes(cr.args, f=0),
         initial_user_count=4,
         initial_member_count=2,

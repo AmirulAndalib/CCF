@@ -161,7 +161,7 @@ class Request:
         if self.headers:
             string += f" <blue>{truncate(str(self.headers), max_len=25)}</>"
         if self.body is not None:
-            string += f' {truncate(f"{self.body}")}'
+            string += escape_loguru_tags(f' {truncate(f"{self.body}")}')
 
         return string
 
@@ -1235,6 +1235,19 @@ class CCFClient:
             raise ValueError('"http_verb" should not be specified')
 
         kwargs["http_verb"] = "OPTIONS"
+        return self.call(*args, **kwargs)
+
+    def patch(self, *args, **kwargs) -> Response:
+        """
+        Issue ``PATCH`` request.
+        See :py:meth:`infra.clients.CCFClient.call`.
+
+        :return: :py:class:`infra.clients.Response`
+        """
+        if "http_verb" in kwargs:
+            raise ValueError('"http_verb" should not be specified')
+
+        kwargs["http_verb"] = "PATCH"
         return self.call(*args, **kwargs)
 
     def wait_for_commit(

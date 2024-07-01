@@ -36,7 +36,7 @@ namespace ccf
 
     struct TimeoutTask
     {
-      threading::TaskQueue::TimerEntry timer_entry;
+      ::threading::TaskQueue::TimerEntry timer_entry;
       uint16_t thread_id;
     };
 
@@ -66,17 +66,17 @@ namespace ccf
 
     struct CancelTimerMsg
     {
-      threading::TaskQueue::TimerEntry timer_entry;
+      ::threading::TaskQueue::TimerEntry timer_entry;
     };
 
-    std::unique_ptr<threading::Tmsg<SendTimeoutErrorMsg>>
+    std::unique_ptr<::threading::Tmsg<SendTimeoutErrorMsg>>
     create_timeout_error_task(
       const ccf::NodeId& to,
       size_t client_session_id,
       const std::chrono::milliseconds& timeout)
     {
-      return std::make_unique<threading::Tmsg<SendTimeoutErrorMsg>>(
-        [](std::unique_ptr<threading::Tmsg<SendTimeoutErrorMsg>> msg) {
+      return std::make_unique<::threading::Tmsg<SendTimeoutErrorMsg>>(
+        [](std::unique_ptr<::threading::Tmsg<SendTimeoutErrorMsg>> msg) {
           msg->data.forwarder->send_timeout_error_response(
             msg->data.to, msg->data.client_session_id, msg->data.timeout);
         },
@@ -94,7 +94,7 @@ namespace ccf
       auto rpc_responder_shared = rpcresponder.lock();
       if (rpc_responder_shared)
       {
-        auto response = http::Response(HTTP_STATUS_GATEWAY_TIMEOUT);
+        auto response = ::http::Response(HTTP_STATUS_GATEWAY_TIMEOUT);
         auto body = fmt::format(
           "Request was forwarded to node {}, but no response was received "
           "after {}ms",
@@ -109,15 +109,15 @@ namespace ccf
     }
 
     static void cancel_forwarding_task_cb(
-      std::unique_ptr<threading::Tmsg<CancelTimerMsg>> msg)
+      std::unique_ptr<::threading::Tmsg<CancelTimerMsg>> msg)
     {
       cancel_forwarding_task(msg->data.timer_entry);
     }
 
     static void cancel_forwarding_task(
-      threading::TaskQueue::TimerEntry timer_entry)
+      ::threading::TaskQueue::TimerEntry timer_entry)
     {
-      threading::ThreadMessaging::instance().cancel_timer_task(timer_entry);
+      ::threading::ThreadMessaging::instance().cancel_timer_task(timer_entry);
     }
 
   public:
@@ -172,9 +172,9 @@ namespace ccf
         std::lock_guard<ccf::pal::Mutex> guard(timeout_tasks_lock);
         command_id = next_command_id++;
         timeout_tasks[command_id] = {
-          threading::ThreadMessaging::instance().add_task_after(
+          ::threading::ThreadMessaging::instance().add_task_after(
             create_timeout_error_task(to, client_session_id, timeout), timeout),
-          threading::get_current_thread_id()};
+          ccf::threading::get_current_thread_id()};
       }
 
       const auto view_opt = session_ctx->active_view;
@@ -190,7 +190,7 @@ namespace ccf
     }
 
     template <typename TFwdHdr>
-    std::shared_ptr<http::HttpRpcContext> recv_forwarded_command(
+    std::shared_ptr<::http::HttpRpcContext> recv_forwarded_command(
       const NodeId& from, const uint8_t* data, size_t size)
     {
       std::pair<TFwdHdr, std::vector<uint8_t>> r;
@@ -237,7 +237,7 @@ namespace ccf
         return ccf::make_fwd_rpc_context(
           session, raw_request, r.first.frame_format);
       }
-      catch (const http::RequestTooLargeException& rexc)
+      catch (const ::http::RequestTooLargeException& rexc)
       {
         LOG_FAIL_FMT("Forwarded request exceeded limit: {}", rexc.what());
         return nullptr;
@@ -312,7 +312,7 @@ namespace ccf
     }
 
     std::shared_ptr<ForwardedRpcHandler> get_forwarder_handler(
-      std::shared_ptr<http::HttpRpcContext>& ctx)
+      std::shared_ptr<::http::HttpRpcContext>& ctx)
     {
       if (ctx == nullptr)
       {
@@ -328,7 +328,7 @@ namespace ccf
       }
 
       std::shared_ptr<ccf::RpcHandler> search =
-        http::fetch_rpc_handler(ctx, rpc_map_shared);
+        ::http::fetch_rpc_handler(ctx, rpc_map_shared);
 
       auto fwd_handler = std::dynamic_pointer_cast<ForwardedRpcHandler>(search);
       if (!fwd_handler)
@@ -459,13 +459,14 @@ namespace ccf
             auto it = timeout_tasks.find(cmd_id);
             if (it != timeout_tasks.end())
             {
-              if (threading::get_current_thread_id() != it->second.thread_id)
+              if (
+                ccf::threading::get_current_thread_id() != it->second.thread_id)
               {
-                auto msg = std::make_unique<threading::Tmsg<CancelTimerMsg>>(
+                auto msg = std::make_unique<::threading::Tmsg<CancelTimerMsg>>(
                   &cancel_forwarding_task_cb);
                 msg->data.timer_entry = it->second.timer_entry;
 
-                threading::ThreadMessaging::instance().add_task(
+                ::threading::ThreadMessaging::instance().add_task(
                   it->second.thread_id, std::move(msg));
               }
               else

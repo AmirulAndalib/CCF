@@ -11,10 +11,10 @@ namespace ccf
 {
   static inline llhttp_method http_method_from_str(const std::string_view& s)
   {
-    const auto hashed_name = ds::fnv_1a<size_t>(s);
+    const auto hashed_name = ccf::ds::fnv_1a<size_t>(s);
 
 #define XX(num, name, string) \
-  case (ds::fnv_1a<size_t>(#string)): \
+  case (ccf::ds::fnv_1a<size_t>(#string)): \
   { \
     return llhttp_method(num); \
   }
@@ -85,7 +85,7 @@ namespace ccf
   inline void to_json(nlohmann::json& j, const RESTVerb& verb)
   {
     std::string s(verb.c_str());
-    nonstd::to_lower(s);
+    ccf::nonstd::to_lower(s);
     j = s;
   }
 
@@ -98,7 +98,7 @@ namespace ccf
     }
 
     std::string s = j.get<std::string>();
-    nonstd::to_upper(s);
+    ccf::nonstd::to_upper(s);
 
     verb = RESTVerb(s.c_str());
   }

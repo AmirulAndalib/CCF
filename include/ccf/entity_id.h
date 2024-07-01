@@ -94,7 +94,7 @@ namespace ccf
     }
     else
     {
-      throw JsonParseError(fmt::format(
+      throw ccf::JsonParseError(fmt::format(
         "{} should be hex-encoded string: {}",
         FmtExtender::ID_LABEL,
         j.dump()));
@@ -202,7 +202,7 @@ struct formatter<ccf::EntityId<FmtExtender>>
 };
 FMT_END_NAMESPACE
 
-namespace kv::serialisers
+namespace ccf::kv::serialisers
 {
   template <typename FmtExtender>
   struct BlitSerialiser<ccf::EntityId<FmtExtender>>

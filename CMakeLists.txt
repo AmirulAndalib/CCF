@@ -59,7 +59,7 @@ function(message)
 endfunction()
 
 option(PROFILE_TESTS "Profile tests" OFF)
-set(PYTHON unbuffer python3)
+set(PYTHON python3)
 
 set(DISTRIBUTE_PERF_TESTS
     ""
@@ -174,14 +174,8 @@ foreach(UTILITY ${CCF_UTILITIES})
 endforeach()
 
 # Copy utilities from tests directory
-set(CCF_TEST_UTILITIES
-    tests.sh
-    cimetrics_env.sh
-    upload_pico_metrics.py
-    test_install.sh
-    docker_wrap.sh
-    config.jinja
-    recovery_benchmark.sh
+set(CCF_TEST_UTILITIES tests.sh convert_pico_to_bencher.py test_install.sh
+                       docker_wrap.sh config.jinja recovery_benchmark.sh
 )
 foreach(UTILITY ${CCF_TEST_UTILITIES})
   configure_file(
@@ -340,6 +334,7 @@ set(CCF_JS_SOURCES
     ${CCF_DIR}/src/js/ffi_plugins.cpp
     ${CCF_DIR}/src/js/extensions/console.cpp
     ${CCF_DIR}/src/js/extensions/math/random.cpp
+    ${CCF_DIR}/src/js/extensions/snp_attestation.cpp
     ${CCF_DIR}/src/js/extensions/ccf/consensus.cpp
     ${CCF_DIR}/src/js/extensions/ccf/converters.cpp
     ${CCF_DIR}/src/js/extensions/ccf/crypto.cpp
@@ -351,6 +346,7 @@ set(CCF_JS_SOURCES
     ${CCF_DIR}/src/js/extensions/ccf/node.cpp
     ${CCF_DIR}/src/js/extensions/ccf/rpc.cpp
     ${CCF_DIR}/src/js/extensions/ccf/request.cpp
+    ${CCF_DIR}/src/js/registry.cpp
 )
 
 if(COMPILE_TARGET STREQUAL "sgx")
@@ -491,106 +487,6 @@ set(CCF_NETWORK_TEST_ARGS
     ${TEST_LOGGING_LEVEL} --worker-threads ${WORKER_THREADS}
 )
 
-if(COMPILE_TARGET STREQUAL "sgx")
-  add_enclave_library(js_openenclave.enclave ${CCF_DIR}/src/js/openenclave.cpp)
-  target_link_libraries(js_openenclave.enclave PUBLIC ccf.enclave)
-  add_lvi_mitigations(js_openenclave.enclave)
-  install(
-    TARGETS js_openenclave.enclave
-    EXPORT ccf
-    DESTINATION lib
-  )
-
-  add_enclave_library(
-    js_snp_attestation.enclave ${CCF_DIR}/src/js/snp_attestation.cpp
-  )
-  target_link_libraries(js_snp_attestation.enclave PUBLIC ccf.enclave)
-  add_lvi_mitigations(js_snp_attestation.enclave)
-  install(
-    TARGETS js_snp_attestation.enclave
-    EXPORT ccf
-    DESTINATION lib
-  )
-elseif(COMPILE_TARGET STREQUAL "snp" AND REQUIRE_OPENENCLAVE)
-  add_library(js_openenclave.snp STATIC ${CCF_DIR}/src/js/openenclave.cpp)
-  add_san(js_openenclave.snp)
-  target_link_libraries(js_openenclave.snp PUBLIC ccf.snp)
-  target_compile_options(js_openenclave.snp PRIVATE ${COMPILE_LIBCXX})
-  target_compile_definitions(
-    js_openenclave.snp PUBLIC INSIDE_ENCLAVE VIRTUAL_ENCLAVE
-                              _LIBCPP_HAS_THREAD_API_PTHREAD PLATFORM_SNP
-  )
-  set_property(TARGET js_openenclave.snp PROPERTY POSITION_INDEPENDENT_CODE ON)
-  install(
-    TARGETS js_openenclave.snp
-    EXPORT ccf
-    DESTINATION lib
-  )
-  set(JS_OPENENCLAVE_SNP js_openenclave.snp)
-elseif(COMPILE_TARGET STREQUAL "virtual" AND REQUIRE_OPENENCLAVE)
-  add_library(js_openenclave.virtual STATIC ${CCF_DIR}/src/js/openenclave.cpp)
-  add_san(js_openenclave.virtual)
-  target_link_libraries(js_openenclave.virtual PUBLIC ccf.virtual)
-  target_compile_options(js_openenclave.virtual PRIVATE ${COMPILE_LIBCXX})
-  target_compile_definitions(
-    js_openenclave.virtual
-    PUBLIC INSIDE_ENCLAVE VIRTUAL_ENCLAVE _LIBCPP_HAS_THREAD_API_PTHREAD
-           PLATFORM_VIRTUAL
-  )
-  set_property(
-    TARGET js_openenclave.virtual PROPERTY POSITION_INDEPENDENT_CODE ON
-  )
-  install(
-    TARGETS js_openenclave.virtual
-    EXPORT ccf
-    DESTINATION lib
-  )
-  set(JS_OPENENCLAVE_VIRTUAL js_openenclave.virtual)
-endif()
-
-if(COMPILE_TARGET STREQUAL "snp")
-  add_library(
-    js_snp_attestation.snp STATIC ${CCF_DIR}/src/js/snp_attestation.cpp
-  )
-  add_san(js_snp_attestation.snp)
-  target_link_libraries(js_snp_attestation.snp PUBLIC ccf.snp)
-  target_compile_options(js_snp_attestation.snp PRIVATE ${COMPILE_LIBCXX})
-  target_compile_definitions(
-    js_snp_attestation.snp PUBLIC INSIDE_ENCLAVE VIRTUAL_ENCLAVE
-                                  _LIBCPP_HAS_THREAD_API_PTHREAD PLATFORM_SNP
-  )
-  set_property(
-    TARGET js_snp_attestation.snp PROPERTY POSITION_INDEPENDENT_CODE ON
-  )
-  install(
-    TARGETS js_snp_attestation.snp
-    EXPORT ccf
-    DESTINATION lib
-  )
-  set(JS_SNP_ATTESTATION_SNP js_snp_attestation.snp)
-elseif(COMPILE_TARGET STREQUAL "virtual")
-  add_library(
-    js_snp_attestation.virtual STATIC ${CCF_DIR}/src/js/snp_attestation.cpp
-  )
-  add_san(js_snp_attestation.virtual)
-  target_link_libraries(js_snp_attestation.virtual PUBLIC ccf.virtual)
-  target_compile_options(js_snp_attestation.virtual PRIVATE ${COMPILE_LIBCXX})
-  target_compile_definitions(
-    js_snp_attestation.virtual
-    PUBLIC INSIDE_ENCLAVE VIRTUAL_ENCLAVE _LIBCPP_HAS_THREAD_API_PTHREAD
-           PLATFORM_VIRTUAL
-  )
-  set_property(
-    TARGET js_snp_attestation.virtual PROPERTY POSITION_INDEPENDENT_CODE ON
-  )
-  install(
-    TARGETS js_snp_attestation.virtual
-    EXPORT ccf
-    DESTINATION lib
-  )
-  set(JS_SNP_ATTESTATION_VIRTUAL js_snp_attestation.virtual)
-endif()
-
 set(JS_GENERIC_SOURCES ${CCF_DIR}/src/apps/js_generic/js_generic_base.cpp)
 if(COMPILE_TARGET STREQUAL "sgx")
   add_enclave_library(js_generic_base.enclave ${JS_GENERIC_SOURCES})
@@ -623,18 +519,6 @@ elseif(COMPILE_TARGET STREQUAL "virtual")
   add_warning_checks(js_generic_base.virtual)
   target_link_libraries(js_generic_base.virtual PUBLIC ccf.virtual)
   target_compile_options(js_generic_base.virtual PRIVATE ${COMPILE_LIBCXX})
-  if(REQUIRE_OPENENCLAVE)
-    target_compile_definitions(
-      js_openenclave.virtual
-      PUBLIC INSIDE_ENCLAVE VIRTUAL_ENCLAVE _LIBCPP_HAS_THREAD_API_PTHREAD
-             PLATFORM_VIRTUAL
-    )
-  endif()
-  target_compile_definitions(
-    js_snp_attestation.virtual
-    PUBLIC INSIDE_ENCLAVE VIRTUAL_ENCLAVE _LIBCPP_HAS_THREAD_API_PTHREAD
-           PLATFORM_VIRTUAL
-  )
   set_property(
     TARGET js_generic_base.virtual PROPERTY POSITION_INDEPENDENT_CODE ON
   )
@@ -648,12 +532,9 @@ endif()
 add_ccf_app(
   js_generic
   SRCS ${CCF_DIR}/src/apps/js_generic/js_generic.cpp
-  LINK_LIBS_ENCLAVE js_generic_base.enclave js_openenclave.enclave
-                    js_snp_attestation.enclave
-  LINK_LIBS_VIRTUAL js_generic_base.virtual ${JS_OPENENCLAVE_VIRTUAL}
-                    ${JS_SNP_ATTESTATION_VIRTUAL}
-  LINK_LIBS_SNP js_generic_base.snp ${JS_OPENENCLAVE_SNP}
-                ${JS_SNP_ATTESTATION_SNP} INSTALL_LIBS ON
+  LINK_LIBS_ENCLAVE js_generic_base.enclave
+  LINK_LIBS_VIRTUAL js_generic_base.virtual
+  LINK_LIBS_SNP js_generic_base.snp INSTALL_LIBS ON
 )
 sign_app_library(
   js_generic.enclave ${CCF_DIR}/src/apps/js_generic/oe_sign.conf
@@ -753,10 +634,10 @@ if(COMPILE_TARGET STREQUAL "sgx")
     ccf.enclave
     PUBLIC http_parser.enclave
            sss.enclave
+           ccf_js.enclave
            ccf_endpoints.enclave
            ccfcrypto.enclave
            ccf_kv.enclave
-           ccf_js.enclave
            nghttp2.enclave
   )
 
@@ -801,10 +682,10 @@ elseif(COMPILE_TARGET STREQUAL "snp")
            -lgcc
            http_parser.snp
            sss.snp
+           ccf_js.snp
            ccf_endpoints.snp
            ccfcrypto.snp
            ccf_kv.snp
-           ccf_js.snp
            nghttp2.snp
            ${CMAKE_THREAD_LIBS_INIT}
   )
@@ -852,10 +733,10 @@ elseif(COMPILE_TARGET STREQUAL "virtual")
            -lgcc
            http_parser.host
            sss.host
+           ccf_js.host
            ccf_endpoints.host
            ccfcrypto.host
            ccf_kv.host
-           ccf_js.host
            nghttp2.host
            ${CMAKE_THREAD_LIBS_INIT}
   )
@@ -937,11 +818,6 @@ add_custom_target(
 
 # Add sample apps
 add_subdirectory(${CCF_DIR}/samples)
-
-# Add external_executor app
-if(LONG_TESTS)
-  add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/apps/external_executor)
-endif()
 
 if(BUILD_TESTS)
   enable_testing()
@@ -1061,6 +937,18 @@ if(BUILD_TESTS)
     )
 
     add_unit_test(
+      endorsements_test
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/node/test/endorsements.cpp
+    )
+    set_property(
+      TEST endorsements_test
+      APPEND
+      PROPERTY
+        ENVIRONMENT
+        "TEST_ENDORSEMENTS_PATH=${CMAKE_CURRENT_SOURCE_DIR}/tests/uvm_endorsements"
+    )
+
+    add_unit_test(
       historical_queries_test
       ${CMAKE_CURRENT_SOURCE_DIR}/src/node/test/historical_queries.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/src/node/test/receipt.cpp
@@ -1134,10 +1022,10 @@ if(BUILD_TESTS)
       PRIVATE ${CMAKE_THREAD_LIBS_INIT}
               http_parser.host
               sss.host
+              ccf_js.host
               ccf_endpoints.host
               ccfcrypto.host
               ccf_kv.host
-              ccf_js.host
     )
 
     add_unit_test(
@@ -1145,6 +1033,12 @@ if(BUILD_TESTS)
       ${CMAKE_CURRENT_SOURCE_DIR}/src/endpoints/test/endpoint_registry.cpp
     )
     target_link_libraries(endpoint_registry_test PRIVATE ccf_endpoints.host)
+
+    add_unit_test(
+      jwt_auth_test
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/endpoints/test/test_jwt_auth.cpp
+    )
+    target_link_libraries(jwt_auth_test PRIVATE ccf_endpoints.host)
 
     add_unit_test(
       tx_status_test
@@ -1161,10 +1055,10 @@ if(BUILD_TESTS)
       PRIVATE ${CMAKE_THREAD_LIBS_INIT}
               http_parser.host
               sss.host
+              ccf_js.host
               ccf_endpoints.host
               ccfcrypto.host
               ccf_kv.host
-              ccf_js.host
     )
 
     add_unit_test(
@@ -1247,19 +1141,6 @@ if(BUILD_TESTS)
     )
     add_picobench(merkle_bench SRCS src/node/test/merkle_bench.cpp)
     add_picobench(hash_bench SRCS src/ds/test/hash_bench.cpp)
-
-    set(CONSTITUTION_ARGS
-        --constitution
-        ${CCF_DIR}/samples/constitutions/default/actions.js
-        --constitution
-        ${CCF_DIR}/samples/constitutions/test/test_actions.js
-        --constitution
-        ${CCF_DIR}/samples/constitutions/default/validate.js
-        --constitution
-        ${CCF_DIR}/samples/constitutions/test/resolve.js
-        --constitution
-        ${CCF_DIR}/samples/constitutions/default/apply.js
-    )
 
     if(LONG_TESTS)
       set(ADDITIONAL_RECOVERY_ARGS --with-load)
@@ -1378,6 +1259,19 @@ if(BUILD_TESTS)
                       ${CMAKE_SOURCE_DIR}/tests/js-launch-host-process
     )
 
+    set(CONSTITUTION_ARGS
+        --constitution
+        ${CCF_DIR}/samples/constitutions/default/actions.js
+        --constitution
+        ${CCF_DIR}/samples/constitutions/test/test_actions.js
+        --constitution
+        ${CCF_DIR}/samples/constitutions/default/validate.js
+        --constitution
+        ${CCF_DIR}/samples/constitutions/test/resolve.js
+        --constitution
+        ${CCF_DIR}/samples/constitutions/default/apply.js
+    )
+
     add_e2e_test(
       NAME governance_test
       PYTHON_SCRIPT ${CMAKE_SOURCE_DIR}/tests/governance.py
@@ -1388,7 +1282,9 @@ if(BUILD_TESTS)
     )
 
     add_e2e_test(
-      NAME jwt_test PYTHON_SCRIPT ${CMAKE_SOURCE_DIR}/tests/jwt_test.py
+      NAME jwt_test
+      PYTHON_SCRIPT ${CMAKE_SOURCE_DIR}/tests/jwt_test.py
+      LABEL snp_flaky
     )
 
     add_e2e_test(
@@ -1423,8 +1319,22 @@ if(BUILD_TESTS)
                       ${CMAKE_SOURCE_DIR}/samples/apps/logging/js
     )
 
+    set(RBAC_CONSTITUTION_ARGS
+        --constitution
+        ${CCF_DIR}/samples/constitutions/default/actions.js
+        --constitution
+        ${CCF_DIR}/samples/constitutions/roles/set_role_definition.js
+        --constitution
+        ${CCF_DIR}/samples/constitutions/default/validate.js
+        --constitution
+        ${CCF_DIR}/samples/constitutions/default/resolve.js
+        --constitution
+        ${CCF_DIR}/samples/constitutions/default/apply.js
+    )
+
     add_e2e_test(
       NAME programmability
+      CONSTITUTION ${RBAC_CONSTITUTION_ARGS}
       PYTHON_SCRIPT ${CMAKE_SOURCE_DIR}/tests/programmability.py
     )
 
@@ -1485,6 +1395,7 @@ if(BUILD_TESTS)
     add_e2e_test(
       NAME consistency_trace_validation
       PYTHON_SCRIPT ${CMAKE_SOURCE_DIR}/tests/consistency_trace_validation.py
+      LABEL snp_flaky
     )
 
     add_e2e_test(
@@ -1581,10 +1492,10 @@ if(BUILD_TESTS)
       )
     endif()
 
-    add_perf_test(
+    add_piccolo_test(
       NAME pi_ls
       PYTHON_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/tests/infra/piccolo_driver.py
-      CLIENT_BIN ./submit
+      CLIENT_BIN ./submit PERF_LABEL "Logging"
       ADDITIONAL_ARGS --package "samples/apps/logging/liblogging"
                       --max-writes-ahead 1000 --repetitions 10000
     )
@@ -1592,7 +1503,7 @@ if(BUILD_TESTS)
     add_piccolo_test(
       NAME pi_basic
       PYTHON_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/tests/infra/basicperf.py
-      CLIENT_BIN ./submit
+      CLIENT_BIN ./submit PERF_LABEL "Basic"
       ADDITIONAL_ARGS --package "samples/apps/basic/libbasic" --client-def
                       "1,write,100000,primary"
     )
@@ -1600,7 +1511,7 @@ if(BUILD_TESTS)
     add_piccolo_test(
       NAME pi_basic_js
       PYTHON_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/tests/infra/basicperf.py
-      CLIENT_BIN ./submit
+      CLIENT_BIN ./submit PERF_LABEL "Basic JS"
       ADDITIONAL_ARGS --js-app-bundle ${CMAKE_SOURCE_DIR}/samples/apps/basic/js
                       --client-def "1,write,100000,primary"
     )
@@ -1609,16 +1520,16 @@ if(BUILD_TESTS)
       add_piccolo_test(
         NAME pi_basic_mt
         PYTHON_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/tests/infra/basicperf.py
-        CLIENT_BIN ./submit
+        CLIENT_BIN ./submit PERF_LABEL "Basic Multi-Threaded"
         ADDITIONAL_ARGS --package "samples/apps/basic/libbasic" --client-def
                         "${WORKER_THREADS},write,100000,primary"
       )
     endif()
 
-    add_perf_test(
+    add_piccolo_test(
       NAME pi_ls_jwt
       PYTHON_SCRIPT ${CMAKE_CURRENT_LIST_DIR}/tests/infra/piccolo_driver.py
-      CLIENT_BIN ./submit
+      CLIENT_BIN ./submit PERF_LABEL "Logging JWT"
       ADDITIONAL_ARGS
         --package
         "samples/apps/logging/liblogging"
@@ -1632,22 +1543,8 @@ if(BUILD_TESTS)
     add_e2e_test(
       NAME historical_query_perf_test
       PYTHON_SCRIPT ${CMAKE_SOURCE_DIR}/tests/historical_query_perf.py
-      LABEL perf
+      LABEL perf PERF_LABEL "Historical Queries"
     )
-
-    if(LONG_TESTS)
-      add_e2e_test(
-        NAME external_executor_test
-        PYTHON_SCRIPT
-          ${CMAKE_SOURCE_DIR}/tests/external_executor/external_executor.py
-      )
-
-      add_e2e_test(
-        NAME external_indexer_test
-        PYTHON_SCRIPT
-          ${CMAKE_SOURCE_DIR}/tests/external_executor/external_indexer.py
-      )
-    endif()
   endif()
 endif()
 

@@ -2,7 +2,6 @@
 // Licensed under the Apache 2.0 License.
 #pragma once
 
-#include "ccf/serdes.h"
 #include "ccf/service/tables/jwt.h"
 #include "http/http_builder.h"
 #include "http/http_rpc_context.h"
@@ -18,22 +17,22 @@ namespace ccf
   private:
     size_t refresh_interval_s;
     NetworkState& network;
-    std::shared_ptr<kv::Consensus> consensus;
+    std::shared_ptr<ccf::kv::Consensus> consensus;
     std::shared_ptr<ccf::RPCSessions> rpcsessions;
     std::shared_ptr<ccf::RPCMap> rpc_map;
-    crypto::KeyPairPtr node_sign_kp;
-    crypto::Pem node_cert;
+    ccf::crypto::KeyPairPtr node_sign_kp;
+    ccf::crypto::Pem node_cert;
     std::atomic_size_t attempts;
 
   public:
     JwtKeyAutoRefresh(
       size_t refresh_interval_s,
       NetworkState& network,
-      const std::shared_ptr<kv::Consensus>& consensus,
+      const std::shared_ptr<ccf::kv::Consensus>& consensus,
       const std::shared_ptr<ccf::RPCSessions>& rpcsessions,
       const std::shared_ptr<ccf::RPCMap>& rpc_map,
-      const crypto::KeyPairPtr& node_sign_kp,
-      const crypto::Pem& node_cert) :
+      const ccf::crypto::KeyPairPtr& node_sign_kp,
+      const ccf::crypto::Pem& node_cert) :
       refresh_interval_s(refresh_interval_s),
       network(network),
       consensus(consensus),
@@ -53,8 +52,8 @@ namespace ccf
 
     void start()
     {
-      auto refresh_msg = std::make_unique<threading::Tmsg<RefreshTimeMsg>>(
-        [](std::unique_ptr<threading::Tmsg<RefreshTimeMsg>> msg) {
+      auto refresh_msg = std::make_unique<::threading::Tmsg<RefreshTimeMsg>>(
+        [](std::unique_ptr<::threading::Tmsg<RefreshTimeMsg>> msg) {
           if (!msg->data.self.consensus->can_replicate())
           {
             LOG_DEBUG_FMT(
@@ -68,7 +67,7 @@ namespace ccf
             "JWT key auto-refresh: Scheduling in {}s",
             msg->data.self.refresh_interval_s);
           auto delay = std::chrono::seconds(msg->data.self.refresh_interval_s);
-          threading::ThreadMessaging::instance().add_task_after(
+          ::threading::ThreadMessaging::instance().add_task_after(
             std::move(msg), delay);
         },
         *this);
@@ -76,14 +75,14 @@ namespace ccf
       LOG_DEBUG_FMT(
         "JWT key auto-refresh: Scheduling in {}s", refresh_interval_s);
       auto delay = std::chrono::seconds(refresh_interval_s);
-      threading::ThreadMessaging::instance().add_task_after(
+      ::threading::ThreadMessaging::instance().add_task_after(
         std::move(refresh_msg), delay);
     }
 
     void schedule_once()
     {
-      auto refresh_msg = std::make_unique<threading::Tmsg<RefreshTimeMsg>>(
-        [](std::unique_ptr<threading::Tmsg<RefreshTimeMsg>> msg) {
+      auto refresh_msg = std::make_unique<::threading::Tmsg<RefreshTimeMsg>>(
+        [](std::unique_ptr<::threading::Tmsg<RefreshTimeMsg>> msg) {
           if (!msg->data.self.consensus->can_replicate())
           {
             LOG_DEBUG_FMT(
@@ -98,22 +97,22 @@ namespace ccf
 
       LOG_DEBUG_FMT("JWT key one-off refresh: Scheduling without delay");
       auto delay = std::chrono::seconds(0);
-      threading::ThreadMessaging::instance().add_task_after(
+      ::threading::ThreadMessaging::instance().add_task_after(
         std::move(refresh_msg), delay);
     }
 
     template <typename T>
     void send_refresh_jwt_keys(T msg)
     {
-      auto body = serdes::pack(msg, serdes::Pack::Text);
-
-      http::Request request(fmt::format(
+      ::http::Request request(fmt::format(
         "/{}/{}",
         ccf::get_actor_prefix(ccf::ActorsType::nodes),
         "jwt_keys/refresh"));
       request.set_header(
         http::headers::CONTENT_TYPE, http::headervalues::contenttype::JSON);
-      request.set_body(&body);
+
+      auto body = nlohmann::json(msg).dump();
+      request.set_body(body);
 
       auto packed = request.build_request();
 
@@ -122,7 +121,7 @@ namespace ccf
       auto ctx = ccf::make_rpc_context(node_session, packed);
 
       std::shared_ptr<ccf::RpcHandler> search =
-        http::fetch_rpc_handler(ctx, this->rpc_map);
+        ::http::fetch_rpc_handler(ctx, this->rpc_map);
 
       search->process(ctx);
     }
@@ -137,6 +136,7 @@ namespace ccf
 
     void handle_jwt_jwks_response(
       const std::string& issuer,
+      const std::optional<std::string>& issuer_constraint,
       http_status status,
       std::vector<uint8_t>&& data)
     {
@@ -173,12 +173,26 @@ namespace ccf
 
       // call internal endpoint to update keys
       auto msg = SetJwtPublicSigningKeys{issuer, jwks};
+
+      // For each key we leave the specified issuer constraint or set a common
+      // one otherwise (if present).
+      if (issuer_constraint.has_value())
+      {
+        for (auto& key : jwks.keys)
+        {
+          if (!key.issuer.has_value())
+          {
+            key.issuer = issuer_constraint;
+          }
+        }
+      }
+
       send_refresh_jwt_keys(msg);
     }
 
     void handle_jwt_metadata_response(
       const std::string& issuer,
-      std::shared_ptr<tls::CA> ca,
+      std::shared_ptr<::tls::CA> ca,
       http_status status,
       std::vector<uint8_t>&& data)
     {
@@ -201,9 +215,10 @@ namespace ccf
         issuer);
 
       std::string jwks_url_str;
+      nlohmann::json metadata;
       try
       {
-        auto metadata = nlohmann::json::parse(data);
+        metadata = nlohmann::json::parse(data);
         jwks_url_str = metadata.at("jwks_uri").get<std::string>();
       }
       catch (const std::exception& e)
@@ -216,10 +231,10 @@ namespace ccf
         send_refresh_jwt_keys_error();
         return;
       }
-      http::URL jwks_url;
+      ::http::URL jwks_url;
       try
       {
-        jwks_url = http::parse_url_full(jwks_url_str);
+        jwks_url = ::http::parse_url_full(jwks_url_str);
       }
       catch (const std::invalid_argument& e)
       {
@@ -232,8 +247,15 @@ namespace ccf
       }
       auto jwks_url_port = !jwks_url.port.empty() ? jwks_url.port : "443";
 
-      auto ca_cert = std::make_shared<tls::Cert>(
+      auto ca_cert = std::make_shared<::tls::Cert>(
         ca, std::nullopt, std::nullopt, jwks_url.host);
+
+      std::optional<std::string> issuer_constraint{std::nullopt};
+      const auto constraint = metadata.find("issuer");
+      if (constraint != metadata.end())
+      {
+        issuer_constraint = *constraint;
+      }
 
       LOG_DEBUG_FMT(
         "JWT key auto-refresh: Requesting JWKS at https://{}:{}{}",
@@ -246,13 +268,14 @@ namespace ccf
       http_client->connect(
         std::string(jwks_url.host),
         std::string(jwks_url_port),
-        [this, issuer](
+        [this, issuer, issuer_constraint](
           http_status status, http::HeaderMap&&, std::vector<uint8_t>&& data) {
-          handle_jwt_jwks_response(issuer, status, std::move(data));
+          handle_jwt_jwks_response(
+            issuer, issuer_constraint, status, std::move(data));
           return true;
         });
-      http::Request r(jwks_url.path, HTTP_GET);
-      r.set_header(http::headers::HOST, std::string(jwks_url.host));
+      ::http::Request r(jwks_url.path, HTTP_GET);
+      r.set_header(ccf::http::headers::HOST, std::string(jwks_url.host));
       http_client->send_request(std::move(r));
     }
 
@@ -293,12 +316,12 @@ namespace ccf
         }
 
         auto metadata_url_str = issuer + "/.well-known/openid-configuration";
-        auto metadata_url = http::parse_url_full(metadata_url_str);
+        auto metadata_url = ::http::parse_url_full(metadata_url_str);
         auto metadata_url_port =
           !metadata_url.port.empty() ? metadata_url.port : "443";
 
-        auto ca = std::make_shared<tls::CA>(ca_cert_bundle_pem.value());
-        auto ca_cert = std::make_shared<tls::Cert>(
+        auto ca = std::make_shared<::tls::CA>(ca_cert_bundle_pem.value());
+        auto ca_cert = std::make_shared<::tls::Cert>(
           ca, std::nullopt, std::nullopt, metadata_url.host);
 
         LOG_DEBUG_FMT(
@@ -314,13 +337,13 @@ namespace ccf
           std::string(metadata_url_port),
           [this, issuer, ca](
             http_status status,
-            http::HeaderMap&&,
+            ccf::http::HeaderMap&&,
             std::vector<uint8_t>&& data) {
             handle_jwt_metadata_response(issuer, ca, status, std::move(data));
             return true;
           });
-        http::Request r(metadata_url.path, HTTP_GET);
-        r.set_header(http::headers::HOST, std::string(metadata_url.host));
+        ::http::Request r(metadata_url.path, HTTP_GET);
+        r.set_header(ccf::http::headers::HOST, std::string(metadata_url.host));
         http_client->send_request(std::move(r));
         return true;
       });

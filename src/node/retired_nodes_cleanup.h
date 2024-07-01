@@ -19,7 +19,7 @@ namespace ccf
 
     void send_cleanup_retired_nodes()
     {
-      http::Request request(
+      ::http::Request request(
         fmt::format(
           "/{}/{}",
           ccf::get_actor_prefix(ccf::ActorsType::nodes),
@@ -40,14 +40,14 @@ namespace ccf
     void cleanup()
     {
       auto cleanup_msg =
-        std::make_unique<threading::Tmsg<RetiredNodeCleanupMsg>>(
-          [](std::unique_ptr<threading::Tmsg<RetiredNodeCleanupMsg>> msg) {
+        std::make_unique<::threading::Tmsg<RetiredNodeCleanupMsg>>(
+          [](std::unique_ptr<::threading::Tmsg<RetiredNodeCleanupMsg>> msg) {
             msg->data.self.send_cleanup_retired_nodes();
           },
           *this);
 
-      threading::ThreadMessaging::instance().add_task(
-        threading::get_current_thread_id(), std::move(cleanup_msg));
+      ::threading::ThreadMessaging::instance().add_task(
+        ccf::threading::get_current_thread_id(), std::move(cleanup_msg));
     }
   };
 }

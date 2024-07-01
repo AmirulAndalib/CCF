@@ -86,14 +86,15 @@ namespace ccf
     max_execution_time,
     max_cached_interpreters);
 
-  struct JWTMetrics
+  struct JWTRefreshMetrics
   {
-    size_t attempts;
-    size_t successes;
+    size_t attempts = 0;
+    size_t successes = 0;
+    size_t failures = 0;
   };
 
-  DECLARE_JSON_TYPE(JWTMetrics)
-  DECLARE_JSON_REQUIRED_FIELDS(JWTMetrics, attempts, successes)
+  DECLARE_JSON_TYPE(JWTRefreshMetrics)
+  DECLARE_JSON_REQUIRED_FIELDS(JWTRefreshMetrics, attempts, successes, failures)
 
   struct SetJwtPublicSigningKeys
   {
@@ -116,7 +117,7 @@ namespace ccf
 
   struct ConsensusConfigDetails
   {
-    kv::ConsensusDetails details;
+    ccf::kv::ConsensusDetails details;
   };
 
   DECLARE_JSON_TYPE(ConsensusConfigDetails);
@@ -124,7 +125,7 @@ namespace ccf
 
   struct SelfSignedNodeCertificateInfo
   {
-    crypto::Pem self_signed_certificate;
+    ccf::crypto::Pem self_signed_certificate;
   };
 
   DECLARE_JSON_TYPE(SelfSignedNodeCertificateInfo);
@@ -135,7 +136,7 @@ namespace ccf
   {
     struct Out
     {
-      crypto::Pem previous_service_identity;
+      ccf::crypto::Pem previous_service_identity;
     };
   };
 
@@ -193,12 +194,12 @@ namespace ccf
     struct ExistingNodeInfo
     {
       NodeId node_id;
-      std::optional<kv::Version> ledger_secret_seqno = std::nullopt;
-      std::optional<crypto::Pem> endorsed_certificate = std::nullopt;
+      std::optional<ccf::kv::Version> ledger_secret_seqno = std::nullopt;
+      std::optional<ccf::crypto::Pem> endorsed_certificate = std::nullopt;
     };
 
     std::optional<ExistingNodeInfo> check_node_exists(
-      kv::Tx& tx,
+      ccf::kv::Tx& tx,
       const std::vector<uint8_t>& self_signed_node_der,
       std::optional<NodeStatus> node_status = std::nullopt)
     {
@@ -210,7 +211,7 @@ namespace ccf
 
       LOG_DEBUG_FMT(
         "Check node exists with certificate [{}]", self_signed_node_der);
-      auto pk_pem = crypto::public_key_pem_from_cert(self_signed_node_der);
+      auto pk_pem = ccf::crypto::public_key_pem_from_cert(self_signed_node_der);
 
       std::optional<ExistingNodeInfo> existing_node_info = std::nullopt;
       nodes->foreach([&existing_node_info,
@@ -233,7 +234,7 @@ namespace ccf
     }
 
     std::optional<NodeId> check_conflicting_node_network(
-      kv::Tx& tx, const NodeInfoNetwork& node_info_network)
+      ccf::kv::Tx& tx, const NodeInfoNetwork& node_info_network)
     {
       auto nodes = tx.rw(network.nodes);
 
@@ -260,7 +261,7 @@ namespace ccf
     }
 
     auto add_node(
-      kv::Tx& tx,
+      ccf::kv::Tx& tx,
       const std::vector<uint8_t>& node_der,
       const JoinNetworkNodeToNode::In& in,
       NodeStatus node_status,
@@ -285,7 +286,7 @@ namespace ccf
             conflicting_node_id.value()));
       }
 
-      auto pubk_der = crypto::public_key_der_from_cert(node_der);
+      auto pubk_der = ccf::crypto::public_key_der_from_cert(node_der);
       NodeId joining_node_id = compute_node_id_from_pubk_der(pubk_der);
 
       pal::PlatformAttestationMeasurement measurement;
@@ -298,7 +299,7 @@ namespace ccf
         return make_error(code, ccf::errors::InvalidQuote, message);
       }
 
-      std::optional<kv::Version> ledger_secret_seqno = std::nullopt;
+      std::optional<ccf::kv::Version> ledger_secret_seqno = std::nullopt;
       if (node_status == NodeStatus::TRUSTED)
       {
         ledger_secret_seqno =
@@ -306,11 +307,12 @@ namespace ccf
       }
 
       // Note: All new nodes should specify a CSR from 2.x
-      auto client_public_key_pem = crypto::public_key_pem_from_cert(node_der);
+      auto client_public_key_pem =
+        ccf::crypto::public_key_pem_from_cert(node_der);
       if (in.certificate_signing_request.has_value())
       {
         // Verify that client's public key matches the one specified in the CSR
-        auto csr_public_key_pem = crypto::public_key_pem_from_csr(
+        auto csr_public_key_pem = ccf::crypto::public_key_pem_from_csr(
           in.certificate_signing_request.value());
         if (client_public_key_pem != csr_public_key_pem)
         {
@@ -343,14 +345,14 @@ namespace ccf
       if (node_status == NodeStatus::TRUSTED)
       {
         // Joining node only submit a CSR from 2.x
-        std::optional<crypto::Pem> endorsed_certificate = std::nullopt;
+        std::optional<ccf::crypto::Pem> endorsed_certificate = std::nullopt;
         if (in.certificate_signing_request.has_value())
         {
           // For a pre-open service, extract the validity period of self-signed
           // node certificate and use it verbatim in endorsed certificate
           auto [valid_from, valid_to] =
-            crypto::make_verifier(node_der)->validity_period();
-          endorsed_certificate = crypto::create_endorsed_cert(
+            ccf::crypto::make_verifier(node_der)->validity_period();
+          endorsed_certificate = ccf::crypto::create_endorsed_cert(
             in.certificate_signing_request.value(),
             valid_from,
             valid_to,
@@ -373,9 +375,27 @@ namespace ccf
       return make_success(rep);
     }
 
+    JWTRefreshMetrics jwt_refresh_metrics;
+    void handle_event_request_completed(
+      const ccf::endpoints::RequestCompletedEvent& event) override
+    {
+      if (event.method == "POST" && event.dispatch_path == "/jwt_keys/refresh")
+      {
+        jwt_refresh_metrics.attempts += 1;
+        int status_category = event.status / 100;
+        if (status_category >= 4)
+        {
+          jwt_refresh_metrics.failures += 1;
+        }
+        else if (status_category == 2)
+        {
+          jwt_refresh_metrics.successes += 1;
+        }
+      }
+    }
+
   public:
-    NodeEndpoints(
-      NetworkState& network_, ccfapp::AbstractNodeContext& context_) :
+    NodeEndpoints(NetworkState& network_, ccf::AbstractNodeContext& context_) :
       CommonEndpointRegistry(get_actor_prefix(ActorsType::nodes), context_),
       network(network_),
       node_operation(*context_.get_subsystem<ccf::AbstractNodeOperation>())
@@ -384,7 +404,7 @@ namespace ccf
       openapi_info.description =
         "This API provides public, uncredentialed access to service and node "
         "state.";
-      openapi_info.document_version = "4.9.1";
+      openapi_info.document_version = "4.9.2";
     }
 
     void init_handlers() override
@@ -882,7 +902,7 @@ namespace ccf
           {
             status = nlohmann::json(status_str.value()).get<NodeStatus>();
           }
-          catch (const JsonParseError& e)
+          catch (const ccf::JsonParseError& e)
           {
             return ccf::make_error(
               HTTP_STATUS_BAD_REQUEST,
@@ -1431,19 +1451,11 @@ namespace ccf
         m.bytecode_used =
           version_val->get() == std::string(ccf::quickjs_version);
 
-        auto js_engine_options = js_engine_map->get();
-        m.max_stack_size = js::core::Runtime::default_stack_size;
-        m.max_heap_size = js::core::Runtime::default_heap_size;
-        m.max_execution_time =
-          js::core::Runtime::default_max_execution_time.count();
-        if (js_engine_options.has_value())
-        {
-          auto& options = js_engine_options.value();
-          m.max_stack_size = options.max_stack_bytes;
-          m.max_heap_size = options.max_heap_bytes;
-          m.max_execution_time = options.max_execution_time_ms;
-          m.max_cached_interpreters = options.max_cached_interpreters;
-        }
+        auto options = js_engine_map->get().value_or(ccf::JSRuntimeOptions{});
+        m.max_stack_size = options.max_stack_bytes;
+        m.max_heap_size = options.max_heap_bytes;
+        m.max_execution_time = options.max_execution_time_ms;
+        m.max_cached_interpreters = options.max_cached_interpreters;
 
         return m;
       };
@@ -1454,27 +1466,6 @@ namespace ccf
         json_read_only_adapter(js_metrics),
         no_auth_required)
         .set_auto_schema<void, JavaScriptMetrics>()
-        .install();
-
-      auto jwt_metrics = [this](auto& ctx, nlohmann::json&&) {
-        JWTMetrics m;
-        // Attempts are recorded by the key refresh code itself, registering
-        // before each call to each issuer's keys
-        m.attempts = node_operation.get_jwt_attempts();
-        // Success is marked by the fact that the key succeeded and called
-        // our internal "jwt_keys/refresh" endpoint.
-        auto metric = get_metrics_for_request(
-          "/jwt_keys/refresh", llhttp_method_name(HTTP_POST));
-        m.successes = metric.calls - (metric.failures + metric.errors);
-        return m;
-      };
-
-      make_read_only_endpoint(
-        "/jwt_metrics",
-        HTTP_GET,
-        json_read_only_adapter(jwt_metrics),
-        no_auth_required)
-        .set_auto_schema<void, JWTMetrics>()
         .install();
 
       auto version = [this](auto&, nlohmann::json&&) {
@@ -1547,12 +1538,13 @@ namespace ccf
         else
         {
           // On recovery, force a new ledger chunk
-          auto tx_ = static_cast<kv::CommittableTx*>(&ctx.tx);
+          auto tx_ = static_cast<ccf::kv::CommittableTx*>(&ctx.tx);
           if (tx_ == nullptr)
           {
             throw std::logic_error("Could not cast tx to CommittableTx");
           }
-          tx_->set_flag(kv::CommittableTx::Flag::LEDGER_CHUNK_BEFORE_THIS_TX);
+          tx_->set_flag(
+            ccf::kv::CommittableTx::Flag::LEDGER_CHUNK_BEFORE_THIS_TX);
         }
 
         auto endorsed_certificates =
@@ -1590,7 +1582,7 @@ namespace ccf
         }
 
         std::optional<ccf::ClaimsDigest::Digest> digest =
-          ccfapp::get_create_tx_claims_digest(ctx.tx);
+          ccf::get_create_tx_claims_digest(ctx.tx);
         if (digest.has_value())
         {
           auto digest_value = digest.value();
@@ -1636,7 +1628,7 @@ namespace ccf
         {
           parsed = body.get<SetJwtPublicSigningKeys>();
         }
-        catch (const JsonParseError& e)
+        catch (const ccf::JsonParseError& e)
         {
           return make_error(
             HTTP_STATUS_INTERNAL_SERVER_ERROR,
@@ -1644,7 +1636,7 @@ namespace ccf
             "Unable to parse body.");
         }
 
-        auto issuers = ctx.tx.rw(this->network.jwt_issuers);
+        auto issuers = ctx.tx.ro(this->network.jwt_issuers);
         auto issuer_metadata_ = issuers->get(parsed.issuer);
         if (!issuer_metadata_.has_value())
         {
@@ -1698,11 +1690,21 @@ namespace ccf
         .set_openapi_hidden(true)
         .install();
 
+      auto get_jwt_metrics = [this](auto& args, const nlohmann::json& params) {
+        return make_success(jwt_refresh_metrics);
+      };
+      make_read_only_endpoint(
+        "/jwt_keys/refresh/metrics",
+        HTTP_GET,
+        json_read_only_adapter(get_jwt_metrics),
+        no_auth_required)
+        .set_auto_schema<void, JWTRefreshMetrics>()
+        .install();
+
       auto service_config_handler =
         [this](auto& args, const nlohmann::json& params) {
           return make_success(args.tx.ro(network.config)->get());
         };
-
       make_endpoint(
         "/service/configuration",
         HTTP_GET,
@@ -1797,8 +1799,7 @@ namespace ccf
     NodeEndpoints node_endpoints;
 
   public:
-    NodeRpcFrontend(
-      NetworkState& network, ccfapp::AbstractNodeContext& context) :
+    NodeRpcFrontend(NetworkState& network, ccf::AbstractNodeContext& context) :
       RpcFrontend(*network.tables, node_endpoints, context),
       node_endpoints(network, context)
     {}

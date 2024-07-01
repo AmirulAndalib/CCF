@@ -18,12 +18,12 @@ namespace http
   protected:
     std::shared_ptr<ccf::TLSSession> tls_io;
     std::shared_ptr<ErrorReporter> error_reporter;
-    tls::ConnID session_id;
+    ::tls::ConnID session_id;
 
     HTTPSession(
-      tls::ConnID session_id_,
+      ::tls::ConnID session_id_,
       ringbuffer::AbstractWriterFactory& writer_factory,
-      std::unique_ptr<tls::Context> ctx,
+      std::unique_ptr<ccf::tls::Context> ctx,
       const std::shared_ptr<ErrorReporter>& error_reporter = nullptr) :
       ccf::ThreadedSession(session_id_),
       tls_io(std::make_shared<ccf::TLSSession>(
@@ -86,7 +86,7 @@ namespace http
 
   class HTTPServerSession : public HTTPSession,
                             public http::RequestProcessor,
-                            public http::HTTPResponder
+                            public ccf::http::HTTPResponder
   {
   private:
     http::RequestParser request_parser;
@@ -99,11 +99,11 @@ namespace http
   public:
     HTTPServerSession(
       std::shared_ptr<ccf::RPCMap> rpc_map,
-      tls::ConnID session_id_,
+      ::tls::ConnID session_id_,
       const ccf::ListenInterfaceID& interface_id,
       ringbuffer::AbstractWriterFactory& writer_factory,
-      std::unique_ptr<tls::Context> ctx,
-      const http::ParserConfiguration& configuration,
+      std::unique_ptr<ccf::tls::Context> ctx,
+      const ccf::http::ParserConfiguration& configuration,
       const std::shared_ptr<ErrorReporter>& error_reporter = nullptr) :
       HTTPSession(session_id_, writer_factory, std::move(ctx), error_reporter),
       request_parser(*this, configuration),
@@ -160,9 +160,9 @@ namespace http
         }
         LOG_DEBUG_FMT("Error parsing HTTP request: {}", e.what());
 
-        http::HeaderMap headers;
-        headers[http::headers::CONTENT_TYPE] =
-          http::headervalues::contenttype::TEXT;
+        ccf::http::HeaderMap headers;
+        headers[ccf::http::headers::CONTENT_TYPE] =
+          ccf::http::headervalues::contenttype::TEXT;
 
         // NB: Avoid formatting input data a string, as it may contain null
         // bytes. Instead insert it at the end of this message, verbatim
@@ -189,7 +189,7 @@ namespace http
     void handle_request(
       llhttp_method verb,
       const std::string_view& url,
-      http::HeaderMap&& headers,
+      ccf::http::HeaderMap&& headers,
       std::vector<uint8_t>&& body,
       int32_t) override
     {
@@ -269,8 +269,8 @@ namespace http
 
     bool send_response(
       http_status status_code,
-      http::HeaderMap&& headers,
-      http::HeaderMap&& trailers,
+      ccf::http::HeaderMap&& headers,
+      ccf::http::HeaderMap&& trailers,
       std::span<const uint8_t> body) override
     {
       if (!trailers.empty())
@@ -278,7 +278,7 @@ namespace http
         throw std::logic_error("Cannot return trailers over HTTP/1");
       }
 
-      auto response = http::Response(status_code);
+      auto response = ::http::Response(status_code);
       for (const auto& [k, v] : headers)
       {
         response.set_header(k, v);
@@ -291,7 +291,7 @@ namespace http
     }
 
     bool start_stream(
-      http_status status, const http::HeaderMap& headers) override
+      http_status status, const ccf::http::HeaderMap& headers) override
     {
       throw std::logic_error("Not implemented!");
     }
@@ -301,12 +301,13 @@ namespace http
       throw std::logic_error("Not implemented!");
     }
 
-    bool close_stream(http::HeaderMap&&) override
+    bool close_stream(ccf::http::HeaderMap&&) override
     {
       throw std::logic_error("Not implemented!");
     }
 
-    bool set_on_stream_close_callback(StreamOnCloseCallback cb) override
+    bool set_on_stream_close_callback(
+      ccf::http::StreamOnCloseCallback cb) override
     {
       throw std::logic_error("Not implemented!");
     }
@@ -314,16 +315,16 @@ namespace http
 
   class HTTPClientSession : public HTTPSession,
                             public ccf::ClientSession,
-                            public http::ResponseProcessor
+                            public ::http::ResponseProcessor
   {
   private:
-    http::ResponseParser response_parser;
+    ::http::ResponseParser response_parser;
 
   public:
     HTTPClientSession(
-      tls::ConnID session_id_,
+      ::tls::ConnID session_id_,
       ringbuffer::AbstractWriterFactory& writer_factory,
-      std::unique_ptr<tls::Context> ctx) :
+      std::unique_ptr<ccf::tls::Context> ctx) :
       HTTPSession(session_id_, writer_factory, std::move(ctx)),
       ClientSession(session_id_, writer_factory),
       response_parser(*this)
@@ -380,7 +381,7 @@ namespace http
 
     void handle_response(
       http_status status,
-      http::HeaderMap&& headers,
+      ccf::http::HeaderMap&& headers,
       std::vector<uint8_t>&& body) override
     {
       handle_data_cb(status, std::move(headers), std::move(body));
@@ -394,13 +395,13 @@ namespace http
   {
   protected:
     std::shared_ptr<ErrorReporter> error_reporter;
-    tls::ConnID session_id;
+    ::tls::ConnID session_id;
     ringbuffer::AbstractWriterFactory& writer_factory;
     ringbuffer::WriterPtr to_host;
     size_t execution_thread;
 
     UnencryptedHTTPSession(
-      tls::ConnID session_id_,
+      ::tls::ConnID session_id_,
       ringbuffer::AbstractWriterFactory& writer_factory_,
       const std::shared_ptr<ErrorReporter>& error_reporter = nullptr) :
       ccf::ThreadedSession(session_id_),
@@ -419,14 +420,14 @@ namespace http
 
     void send_data(std::span<const uint8_t> data) override
     {
-      if (threading::get_current_thread_id() != execution_thread)
+      if (ccf::threading::get_current_thread_id() != execution_thread)
       {
         throw std::logic_error(
           "Called UnencryptedHTTPSession::send_data "
           "from wrong thread");
       }
       RINGBUFFER_WRITE_MESSAGE(
-        tls::tls_outbound,
+        ::tls::tls_outbound,
         to_host,
         session_id,
         serializer::ByteRange{data.data(), data.size()});
@@ -434,14 +435,14 @@ namespace http
 
     void close_session() override
     {
-      if (threading::get_current_thread_id() != execution_thread)
+      if (ccf::threading::get_current_thread_id() != execution_thread)
       {
         throw std::logic_error(
           "Called UnencryptedHTTPSession::close_session "
           "from wrong thread");
       }
       RINGBUFFER_WRITE_MESSAGE(
-        tls::tls_stop, to_host, session_id, std::string("Session closed"));
+        ::tls::tls_stop, to_host, session_id, std::string("Session closed"));
     }
 
     void handle_incoming_data_thread(std::vector<uint8_t>&& data) override
@@ -452,14 +453,14 @@ namespace http
 
   class UnencryptedHTTPClientSession : public UnencryptedHTTPSession,
                                        public ccf::ClientSession,
-                                       public http::ResponseProcessor
+                                       public ::http::ResponseProcessor
   {
   private:
-    http::ResponseParser response_parser;
+    ::http::ResponseParser response_parser;
 
   public:
     UnencryptedHTTPClientSession(
-      tls::ConnID session_id_,
+      ::tls::ConnID session_id_,
       ringbuffer::AbstractWriterFactory& writer_factory) :
       UnencryptedHTTPSession(session_id_, writer_factory),
       ClientSession(session_id_, writer_factory),
@@ -504,7 +505,7 @@ namespace http
 
     void handle_response(
       http_status status,
-      http::HeaderMap&& headers,
+      ccf::http::HeaderMap&& headers,
       std::vector<uint8_t>&& body) override
     {
       handle_data_cb(status, std::move(headers), std::move(body));

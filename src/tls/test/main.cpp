@@ -21,7 +21,7 @@
 #include <thread>
 
 using namespace std;
-using namespace crypto;
+using namespace ccf::crypto;
 using namespace tls;
 
 /// Server uses one pipe while client uses the other.
@@ -164,7 +164,7 @@ long recv(
 
 /// Performs a TLS handshake, looping until there's nothing more to read/write.
 /// Returns 0 on success, throws a runtime error with SSL error str on failure.
-int handshake(Context* ctx, std::atomic<bool>& keep_going)
+int handshake(ccf::tls::Context* ctx, std::atomic<bool>& keep_going)
 {
   while (keep_going)
   {
@@ -183,26 +183,26 @@ int handshake(Context* ctx, std::atomic<bool>& keep_going)
 
       case TLS_ERR_NEED_CERT:
       {
-        LOG_FAIL_FMT("Handshake error: {}", tls::error_string(rc));
+        LOG_FAIL_FMT("Handshake error: {}", ::tls::error_string(rc));
         return 1;
       }
 
       case TLS_ERR_CONN_CLOSE_NOTIFY:
       {
-        LOG_FAIL_FMT("Handshake error: {}", tls::error_string(rc));
+        LOG_FAIL_FMT("Handshake error: {}", ::tls::error_string(rc));
         return 1;
       }
 
       case TLS_ERR_X509_VERIFY:
       {
         auto err = ctx->get_verify_error();
-        LOG_FAIL_FMT("Handshake error: {} [{}]", err, tls::error_string(rc));
+        LOG_FAIL_FMT("Handshake error: {} [{}]", err, ::tls::error_string(rc));
         return 1;
       }
 
       default:
       {
-        LOG_FAIL_FMT("Handshake error: {}", tls::error_string(rc));
+        LOG_FAIL_FMT("Handshake error: {}", ::tls::error_string(rc));
         return 1;
       }
     }
@@ -213,35 +213,35 @@ int handshake(Context* ctx, std::atomic<bool>& keep_going)
 
 struct NetworkCA
 {
-  shared_ptr<crypto::KeyPair> kp;
-  crypto::Pem cert;
+  shared_ptr<ccf::crypto::KeyPair> kp;
+  ccf::crypto::Pem cert;
 };
 
-static crypto::Pem generate_self_signed_cert(
-  const crypto::KeyPairPtr& kp, const std::string& name)
+static ccf::crypto::Pem generate_self_signed_cert(
+  const ccf::crypto::KeyPairPtr& kp, const std::string& name)
 {
   using namespace std::literals;
   constexpr size_t certificate_validity_period_days = 365;
   auto valid_from =
-    ds::to_x509_time_string(std::chrono::system_clock::now() - 24h);
+    ::ds::to_x509_time_string(std::chrono::system_clock::now() - 24h);
 
-  return crypto::create_self_signed_cert(
+  return ccf::crypto::create_self_signed_cert(
     kp, name, {}, valid_from, certificate_validity_period_days);
 }
 
-static crypto::Pem generate_endorsed_cert(
-  const crypto::KeyPairPtr& kp,
+static ccf::crypto::Pem generate_endorsed_cert(
+  const ccf::crypto::KeyPairPtr& kp,
   const std::string& name,
-  const crypto::KeyPairPtr& issuer_kp,
-  const crypto::Pem& issuer_cert)
+  const ccf::crypto::KeyPairPtr& issuer_kp,
+  const ccf::crypto::Pem& issuer_cert)
 {
   constexpr size_t certificate_validity_period_days = 365;
 
   using namespace std::literals;
   auto valid_from =
-    ds::to_x509_time_string(std::chrono::system_clock::now() - 24h);
+    ::ds::to_x509_time_string(std::chrono::system_clock::now() - 24h);
 
-  return crypto::create_endorsed_cert(
+  return ccf::crypto::create_endorsed_cert(
     kp,
     name,
     {},
@@ -255,35 +255,36 @@ static crypto::Pem generate_endorsed_cert(
 NetworkCA get_ca()
 {
   // Create a CA with a self-signed certificate
-  auto kp = crypto::make_key_pair();
+  auto kp = ccf::crypto::make_key_pair();
   auto crt = generate_self_signed_cert(kp, "CN=issuer");
   LOG_DEBUG_FMT("New self-signed CA certificate:\n{}", crt.str());
   return {kp, crt};
 }
 
-/// Creates a tls::Cert with a new CA using a new self-signed Pem certificate.
-unique_ptr<tls::Cert> get_dummy_cert(
+/// Creates a ::tls::Cert with a new CA using a new self-signed Pem certificate.
+unique_ptr<::tls::Cert> get_dummy_cert(
   NetworkCA& net_ca, string name, bool auth_required = true)
 {
   // Create a CA with a self-signed certificate
-  auto ca = make_unique<tls::CA>(net_ca.cert.str());
+  auto ca = make_unique<::tls::CA>(net_ca.cert.str());
 
   // Create a signing request and sign with the CA
-  auto kp = crypto::make_key_pair();
+  auto kp = ccf::crypto::make_key_pair();
   auto crt = generate_endorsed_cert(kp, "CN=" + name, net_ca.kp, net_ca.cert);
   LOG_DEBUG_FMT("New CA-signed certificate:\n{}", crt.str());
 
   // Verify node certificate with the CA's certificate
-  auto v = crypto::make_verifier(crt);
+  auto v = ccf::crypto::make_verifier(crt);
   REQUIRE(v->verify_certificate({&net_ca.cert}));
 
-  // Create a tls::Cert with the CA, the signed certificate and the private key
+  // Create a ::tls::Cert with the CA, the signed certificate and the private
+  // key
   auto pk = kp->private_key_pem();
   return make_unique<Cert>(std::move(ca), crt, pk, std::nullopt, auth_required);
 }
 
 /// Helper to write past the maximum buffer (16k)
-int write_helper(Context& handler, const uint8_t* buf, size_t len)
+int write_helper(ccf::tls::Context& handler, const uint8_t* buf, size_t len)
 {
   LOG_DEBUG_FMT("WRITE {} bytes", len);
   int rc = handler.write(buf, len);
@@ -293,7 +294,7 @@ int write_helper(Context& handler, const uint8_t* buf, size_t len)
 }
 
 /// Helper to read past the maximum buffer (16k)
-int read_helper(Context& handler, uint8_t* buf, size_t len)
+int read_helper(ccf::tls::Context& handler, uint8_t* buf, size_t len)
 {
   LOG_DEBUG_FMT("READ {} bytes", len);
   int rc = handler.read(buf, len);
@@ -319,8 +320,8 @@ void run_test_case(
   size_t message_length,
   const uint8_t* response,
   size_t response_length,
-  unique_ptr<tls::Cert> server_cert,
-  unique_ptr<tls::Cert> client_cert)
+  unique_ptr<::tls::Cert> server_cert,
+  unique_ptr<::tls::Cert> client_cert)
 {
   uint8_t buf[max(message_length, response_length) + 1];
 
@@ -496,7 +497,7 @@ TEST_CASE("verified handshake")
 
 TEST_CASE("self-signed server certificate")
 {
-  auto kp = crypto::make_key_pair();
+  auto kp = ccf::crypto::make_key_pair();
   auto pk = kp->private_key_pem();
   auto crt = generate_self_signed_cert(kp, "CN=server");
   auto server_cert = make_unique<Cert>(nullptr, crt, pk);
@@ -544,7 +545,7 @@ TEST_CASE("self-signed client certificate")
   auto server_ca = get_ca();
   auto server_cert = get_dummy_cert(server_ca, "server", false);
 
-  auto kp = crypto::make_key_pair();
+  auto kp = ccf::crypto::make_key_pair();
   auto pk = kp->private_key_pem();
   auto crt = generate_self_signed_cert(kp, "CN=server");
 
@@ -620,7 +621,7 @@ TEST_CASE("large message")
   // Uninitialised on purpose, we don't care what's in here
   size_t len = 8192;
   uint8_t buf[len];
-  auto message = crypto::b64_from_raw(buf, len);
+  auto message = ccf::crypto::b64_from_raw(buf, len);
 
   // Create a CA
   auto ca = get_ca();
@@ -646,7 +647,7 @@ TEST_CASE("very large message")
   // Uninitialised on purpose, we don't care what's in here
   size_t len = 16 * 1024; // 16k, base64 will be more
   uint8_t buf[len];
-  auto message = crypto::b64_from_raw(buf, len);
+  auto message = ccf::crypto::b64_from_raw(buf, len);
 
   // Create a CA
   auto ca = get_ca();

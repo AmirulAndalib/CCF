@@ -4,7 +4,7 @@
 
 #include "ccf/ds/enum_formatter.h"
 #include "ccf/ds/logger_level.h"
-#include "ccf/ds/thread_ids.h"
+#include "ccf/threading/thread_ids.h"
 
 #define FMT_HEADER_ONLY
 #include <fmt/chrono.h>
@@ -15,7 +15,7 @@
 #include <sstream>
 #include <type_traits>
 
-namespace logger
+namespace ccf::logger
 {
   static constexpr LoggerLevel MOST_VERBOSE =
 #ifdef CCF_DISABLE_VERBOSE_LOGGING
@@ -72,7 +72,7 @@ namespace logger
       else
       {
 #ifdef INSIDE_ENCLAVE
-        thread_id = threading::get_current_thread_id();
+        thread_id = ccf::threading::get_current_thread_id();
 #else
         thread_id = 100;
 #endif
@@ -356,9 +356,9 @@ namespace logger
 // This allows:
 // CCF_LOG_OUT(DEBUG, "foo") << "this " << "msg";
 #define CCF_LOG_OUT(LVL, TAG) \
-  logger::config::ok(LoggerLevel::LVL) && \
-    logger::Out() == \
-      logger::LogLine(LoggerLevel::LVL, TAG, __FILE__, __LINE__)
+  ccf::logger::config::ok(LoggerLevel::LVL) && \
+    ccf::logger::Out() == \
+      ccf::logger::LogLine(LoggerLevel::LVL, TAG, __FILE__, __LINE__)
 
 // To avoid repeating the (s, ...) args for every macro, we cheat with a curried
 // macro here by ending the macro with another macro name, which then accepts
@@ -376,7 +376,7 @@ namespace logger
   };
 
 #ifndef CCF_LOGGER_NO_DEPRECATE
-#  define CCF_LOGGER_DEPRECATE(MACRO) logger::macro::MACRO;
+#  define CCF_LOGGER_DEPRECATE(MACRO) ccf::logger::macro::MACRO;
 #else
 #  define CCF_LOGGER_DEPRECATE(MACRO)
 #endif

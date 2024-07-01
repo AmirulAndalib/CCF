@@ -59,7 +59,7 @@ namespace ccf
 
     StartType start_type;
 
-    struct NodeContext : public ccfapp::AbstractNodeContext
+    struct NodeContext : public ccf::AbstractNodeContext
     {
       const ccf::NodeId this_node;
 
@@ -87,8 +87,8 @@ namespace ccf
       RingbufferLogger* ringbuffer_logger_,
       size_t sig_tx_interval,
       size_t sig_ms_interval,
-      const consensus::Configuration& consensus_config,
-      const crypto::CurveID& curve_id) :
+      const ccf::consensus::Configuration& consensus_config,
+      const ccf::crypto::CurveID& curve_id) :
       circuit(std::move(circuit_)),
       basic_writer_factory(std::move(basic_writer_factory_)),
       writer_factory(std::move(writer_factory_)),
@@ -99,7 +99,7 @@ namespace ccf
     {
       ccf::pal::initialize_enclave();
       ccf::initialize_verifiers();
-      crypto::openssl_sha256_init();
+      ccf::crypto::openssl_sha256_init();
 
       // https://github.com/microsoft/CCF/issues/5569
       // Open Enclave with OpenSSL 3.x (default for SGX) is built with RDCPU
@@ -178,7 +178,7 @@ namespace ccf
 
       rpc_map->register_frontend<ccf::ActorsType::users>(
         std::make_unique<ccf::UserRpcFrontend>(
-          network, ccfapp::make_user_endpoints(*context), *context));
+          network, ccf::make_user_endpoints(*context), *context));
 
       rpc_map->register_frontend<ccf::ActorsType::nodes>(
         std::make_unique<ccf::NodeRpcFrontend>(network, *context));
@@ -189,7 +189,7 @@ namespace ccf
       rpc_map->register_frontend<ccf::ActorsType::acme_challenge>(
         std::make_unique<ccf::ACMERpcFrontend>(network, *context));
 
-      ccf::js::register_ffi_plugins(ccfapp::get_js_plugins());
+      ccf::js::register_ffi_plugins(ccf::get_js_plugins());
 
       LOG_TRACE_FMT("Initialize node");
       node->initialize(
@@ -214,7 +214,7 @@ namespace ccf
       LOG_TRACE_FMT("Shutting down enclave");
       ccf::shutdown_verifiers();
       ccf::pal::shutdown_enclave();
-      crypto::openssl_sha256_shutdown();
+      ccf::crypto::openssl_sha256_shutdown();
     }
 
     CreateNodeStatus create_new_node(
@@ -295,7 +295,7 @@ namespace ccf
 
     bool run_main()
     {
-      crypto::openssl_sha256_init();
+      ccf::crypto::openssl_sha256_init();
       LOG_DEBUG_FMT("Running main thread");
 #ifndef VIRTUAL_ENCLAVE
       try
@@ -311,7 +311,7 @@ namespace ccf
         DISPATCHER_SET_MESSAGE_HANDLER(
           bp, AdminMessage::stop, [&bp](const uint8_t*, size_t) {
             bp.set_finished();
-            threading::ThreadMessaging::instance().set_finished();
+            ::threading::ThreadMessaging::instance().set_finished();
           });
 
         DISPATCHER_SET_MESSAGE_HANDLER(
@@ -342,7 +342,7 @@ namespace ccf
 
               node->tick(elapsed_ms);
               historical_state_cache->tick(elapsed_ms);
-              threading::ThreadMessaging::instance().tick(elapsed_ms);
+              ::threading::ThreadMessaging::instance().tick(elapsed_ms);
               // When recovering, no signature should be emitted while the
               // public ledger is being read
               if (!node->is_reading_public_ledger())
@@ -371,14 +371,14 @@ namespace ccf
 
         DISPATCHER_SET_MESSAGE_HANDLER(
           bp,
-          consensus::ledger_entry_range,
+          ::consensus::ledger_entry_range,
           [this](const uint8_t* data, size_t size) {
             const auto [from_seqno, to_seqno, purpose, body] =
-              ringbuffer::read_message<consensus::ledger_entry_range>(
+              ringbuffer::read_message<::consensus::ledger_entry_range>(
                 data, size);
             switch (purpose)
             {
-              case consensus::LedgerRequestPurpose::Recovery:
+              case ::consensus::LedgerRequestPurpose::Recovery:
               {
                 if (node->is_reading_public_ledger())
                 {
@@ -396,7 +396,7 @@ namespace ccf
                 }
                 break;
               }
-              case consensus::LedgerRequestPurpose::HistoricalQuery:
+              case ::consensus::LedgerRequestPurpose::HistoricalQuery:
               {
                 historical_state_cache->handle_ledger_entries(
                   from_seqno, to_seqno, body);
@@ -411,19 +411,19 @@ namespace ccf
 
         DISPATCHER_SET_MESSAGE_HANDLER(
           bp,
-          consensus::ledger_no_entry_range,
+          ::consensus::ledger_no_entry_range,
           [this](const uint8_t* data, size_t size) {
             const auto [from_seqno, to_seqno, purpose] =
-              ringbuffer::read_message<consensus::ledger_no_entry_range>(
+              ringbuffer::read_message<::consensus::ledger_no_entry_range>(
                 data, size);
             switch (purpose)
             {
-              case consensus::LedgerRequestPurpose::Recovery:
+              case ::consensus::LedgerRequestPurpose::Recovery:
               {
                 node->recover_ledger_end();
                 break;
               }
-              case consensus::LedgerRequestPurpose::HistoricalQuery:
+              case ::consensus::LedgerRequestPurpose::HistoricalQuery:
               {
                 historical_state_cache->handle_no_entry_range(
                   from_seqno, to_seqno);
@@ -438,10 +438,10 @@ namespace ccf
 
         DISPATCHER_SET_MESSAGE_HANDLER(
           bp,
-          consensus::snapshot_allocated,
+          ::consensus::snapshot_allocated,
           [this](const uint8_t* data, size_t size) {
             const auto [snapshot_span, generation_count] =
-              ringbuffer::read_message<consensus::snapshot_allocated>(
+              ringbuffer::read_message<::consensus::snapshot_allocated>(
                 data, size);
 
             node->write_snapshot(snapshot_span, generation_count);
@@ -462,7 +462,7 @@ namespace ccf
           // Then, execute some thread messages
           size_t thread_msg = 0;
           while (thread_msg < max_messages &&
-                 threading::ThreadMessaging::instance().run_one())
+                 ::threading::ThreadMessaging::instance().run_one())
           {
             thread_msg++;
           }
@@ -502,7 +502,7 @@ namespace ccf
         LOG_INFO_FMT("Enclave stopped successfully. Stopping host...");
         RINGBUFFER_WRITE_MESSAGE(AdminMessage::stopped, to_host);
 
-        crypto::openssl_sha256_shutdown();
+        ccf::crypto::openssl_sha256_shutdown();
 
         return true;
       }
@@ -514,7 +514,7 @@ namespace ccf
         // exceptions bubble up to here and cause the node to shutdown.
         RINGBUFFER_WRITE_MESSAGE(
           AdminMessage::fatal_error_msg, to_host, std::string(e.what()));
-        crypto::openssl_sha256_shutdown();
+        ccf::crypto::openssl_sha256_shutdown();
         return false;
       }
 #endif
@@ -525,33 +525,33 @@ namespace ccf
       uint64_t tid;
     };
 
-    static void init_thread_cb(std::unique_ptr<threading::Tmsg<Msg>> msg)
+    static void init_thread_cb(std::unique_ptr<::threading::Tmsg<Msg>> msg)
     {
       LOG_DEBUG_FMT("First thread CB:{}", msg->data.tid);
     }
 
     bool run_worker()
     {
-      crypto::openssl_sha256_init();
+      ccf::crypto::openssl_sha256_init();
       LOG_DEBUG_FMT("Running worker thread");
 #ifndef VIRTUAL_ENCLAVE
       try
 #endif
       {
-        auto msg = std::make_unique<threading::Tmsg<Msg>>(&init_thread_cb);
-        msg->data.tid = threading::get_current_thread_id();
-        threading::ThreadMessaging::instance().add_task(
+        auto msg = std::make_unique<::threading::Tmsg<Msg>>(&init_thread_cb);
+        msg->data.tid = ccf::threading::get_current_thread_id();
+        ::threading::ThreadMessaging::instance().add_task(
           msg->data.tid, std::move(msg));
 
-        threading::ThreadMessaging::instance().run();
-        crypto::openssl_sha256_shutdown();
+        ::threading::ThreadMessaging::instance().run();
+        ccf::crypto::openssl_sha256_shutdown();
       }
 #ifndef VIRTUAL_ENCLAVE
       catch (const std::exception& e)
       {
         RINGBUFFER_WRITE_MESSAGE(
           AdminMessage::fatal_error_msg, to_host, std::string(e.what()));
-        crypto::openssl_sha256_shutdown();
+        ccf::crypto::openssl_sha256_shutdown();
         return false;
       }
 #endif

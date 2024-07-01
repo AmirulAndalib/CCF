@@ -19,6 +19,11 @@ namespace ccf
 
   struct VerifiersCache;
 
+  bool validate_issuer(
+    const std::string& iss,
+    const std::optional<std::string>& tid,
+    std::string constraint);
+
   class JwtAuthnPolicy : public AuthnPolicy
   {
   protected:
@@ -32,7 +37,7 @@ namespace ccf
     virtual ~JwtAuthnPolicy();
 
     std::unique_ptr<AuthnIdentity> authenticate(
-      kv::ReadOnlyTx& tx,
+      ccf::kv::ReadOnlyTx& tx,
       const std::shared_ptr<ccf::RpcContext>& ctx,
       std::string& error_reason) override;
 

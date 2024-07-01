@@ -17,7 +17,7 @@ namespace ccf
   class RpcFrontend;
 }
 
-namespace kv
+namespace ccf::kv
 {
   class Store;
 }
@@ -27,13 +27,28 @@ namespace ccf
   class UserEndpointRegistry : public CommonEndpointRegistry
   {
   public:
-    UserEndpointRegistry(ccfapp::AbstractNodeContext& context) :
+    UserEndpointRegistry(ccf::AbstractNodeContext& context) :
       CommonEndpointRegistry(get_actor_prefix(ActorsType::users), context)
     {}
+
+    // Default behaviour is to do nothing - do NOT log summary of every request
+    // as it completes. Apps may override this if they wish.
+    void handle_event_request_completed(
+      const ccf::endpoints::RequestCompletedEvent& event) override
+    {}
+
+    void handle_event_dispatch_failed(
+      const ccf::endpoints::DispatchFailedEvent& event) override
+    {
+      // Log dispatch failures, as a coarse metric of some user errors, but do
+      // not log the raw path, which may contain confidential fields
+      // misformatted into the wrong url
+      CCF_APP_INFO("DispatchFailedEvent: {} {}", event.method, event.status);
+    }
   };
 }
 
-namespace ccfapp
+namespace ccf
 {
   // SNIPPET_START: app_interface
   /** To be implemented by the application. Creates a collection of endpoints
@@ -44,7 +59,7 @@ namespace ccfapp
    * @return Unique pointer to the endpoint registry instance
    */
   std::unique_ptr<ccf::endpoints::EndpointRegistry> make_user_endpoints(
-    ccfapp::AbstractNodeContext& context);
+    ccf::AbstractNodeContext& context);
 
   /** To be implemented by the application.
    *

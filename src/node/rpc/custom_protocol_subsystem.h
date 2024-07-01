@@ -39,7 +39,7 @@ namespace ccf
 
     virtual std::shared_ptr<Session> create_session(
       const std::string& protocol_name,
-      tls::ConnID conn_id,
+      ccf::tls::ConnID conn_id,
       const std::unique_ptr<tls::Context>&& ctx) override
     {
       auto it = session_creation_functions.find(protocol_name);
@@ -60,7 +60,7 @@ namespace ccf
       std::shared_ptr<Essentials> r = std::make_shared<Essentials>();
       r->writer = node_state.get_writer_factory().create_writer_to_outside();
       auto store = node_state.get_store();
-      r->tx = std::make_shared<kv::ReadOnlyTx>(store.get());
+      r->tx = std::make_shared<ccf::kv::ReadOnlyTx>(store.get());
       r->ctx = std::make_shared<ccf::endpoints::ReadOnlyEndpointContext>(
         nullptr, *r->tx);
       return r;

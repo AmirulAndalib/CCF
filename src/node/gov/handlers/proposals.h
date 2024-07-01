@@ -3,8 +3,8 @@
 #pragma once
 
 #include "ccf/base_endpoint_registry.h"
+#include "ccf/js/common_context.h"
 #include "ccf/js/extensions/ccf/gov_effects.h"
-#include "js/common_context.h"
 #include "js/extensions/ccf/network.h"
 #include "js/extensions/ccf/node.h"
 #include "node/gov/api_version.h"
@@ -29,7 +29,7 @@ namespace ccf::gov::endpoints
     };
 
     ProposalSubmissionResult validate_proposal_submission_time(
-      kv::Tx& tx,
+      ccf::kv::Tx& tx,
       const std::string& created_at,
       const std::vector<uint8_t>& request_digest,
       const ccf::ProposalId& proposal_id)
@@ -59,8 +59,8 @@ namespace ccf::gov::endpoints
       if (!replay_keys.empty())
       {
         const auto [min_created_at, _] =
-          nonstd::split_1(replay_keys[replay_keys.size() / 2], ":");
-        auto [key_ts, __] = nonstd::split_1(key, ":");
+          ccf::nonstd::split_1(replay_keys[replay_keys.size() / 2], ":");
+        auto [key_ts, __] = ccf::nonstd::split_1(key, ":");
         if (key_ts < min_created_at)
         {
           return {
@@ -93,7 +93,7 @@ namespace ccf::gov::endpoints
     }
 
     void record_cose_governance_history(
-      kv::Tx& tx,
+      ccf::kv::Tx& tx,
       const MemberId& caller_id,
       const std::span<const uint8_t>& cose_sign1)
     {
@@ -104,7 +104,7 @@ namespace ccf::gov::endpoints
     }
 
     void remove_all_other_non_open_proposals(
-      kv::Tx& tx, const ProposalId& proposal_id)
+      ccf::kv::Tx& tx, const ProposalId& proposal_id)
     {
       auto p = tx.rw<ccf::jsgov::ProposalMap>(jsgov::Tables::PROPOSALS);
       auto pi =
@@ -129,9 +129,9 @@ namespace ccf::gov::endpoints
     // Evaluate JS functions on this proposal. Result is presented in modified
     // proposal_info argument, which is written back to the KV by this function
     void resolve_proposal(
-      ccfapp::AbstractNodeContext& context,
+      ccf::AbstractNodeContext& context,
       ccf::NetworkState& network,
-      kv::Tx& tx,
+      ccf::kv::Tx& tx,
       const ProposalId& proposal_id,
       const std::span<const uint8_t>& proposal_bytes,
       ccf::jsgov::ProposalInfo& proposal_info,
@@ -151,7 +151,7 @@ namespace ccf::gov::endpoints
       // Evaluate ballots
       for (const auto& [mid, mb] : proposal_info.ballots)
       {
-        js::CommonContext js_context(js::TxAccess::GOV_RO, &tx);
+        js::CommonContextWithLocalTx js_context(js::TxAccess::GOV_RO, &tx);
 
         auto ballot_func = js_context.get_exported_function(
           mb,
@@ -169,7 +169,7 @@ namespace ccf::gov::endpoints
         auto val = js_context.call_with_rt_options(
           ballot_func,
           argv,
-          &tx,
+          tx.ro<ccf::JSEngine>(ccf::Tables::JSENGINE)->get(),
           js::core::RuntimeLimitsPolicy::NO_LOWER_THAN_DEFAULTS);
 
         if (!val.is_exception())
@@ -193,7 +193,7 @@ namespace ccf::gov::endpoints
       // votes, there is no change to the proposal stored in the KV.
       {
         {
-          js::CommonContext js_context(js::TxAccess::GOV_RO, &tx);
+          js::CommonContextWithLocalTx js_context(js::TxAccess::GOV_RO, &tx);
 
           auto resolve_func = js_context.get_exported_function(
             constitution,
@@ -231,7 +231,7 @@ namespace ccf::gov::endpoints
           auto val = js_context.call_with_rt_options(
             resolve_func,
             argv,
-            &tx,
+            tx.ro<ccf::JSEngine>(ccf::Tables::JSENGINE)->get(),
             js::core::RuntimeLimitsPolicy::NO_LOWER_THAN_DEFAULTS);
 
           if (val.is_exception())
@@ -297,7 +297,7 @@ namespace ccf::gov::endpoints
                 "Unexpected: Could not access GovEffects subsytem");
             }
 
-            js::CommonContext js_context(js::TxAccess::GOV_RW, &tx);
+            js::CommonContextWithLocalTx js_context(js::TxAccess::GOV_RW, &tx);
 
             js_context.add_extension(
               std::make_shared<ccf::js::extensions::NodeExtension>(
@@ -320,7 +320,7 @@ namespace ccf::gov::endpoints
             auto val = js_context.call_with_rt_options(
               apply_func,
               argv,
-              &tx,
+              tx.ro<ccf::JSEngine>(ccf::Tables::JSENGINE)->get(),
               js::core::RuntimeLimitsPolicy::NO_LOWER_THAN_DEFAULTS);
 
             if (val.is_exception())
@@ -387,7 +387,7 @@ namespace ccf::gov::endpoints
   void init_proposals_handlers(
     ccf::BaseEndpointRegistry& registry,
     NetworkState& network,
-    ccfapp::AbstractNodeContext& node_context)
+    ccf::AbstractNodeContext& node_context)
   {
     //// implementation of TSP interface Proposals
     auto create_proposal = [&](auto& ctx, ApiVersion api_version) {
@@ -418,15 +418,15 @@ namespace ccf::gov::endpoints
               return;
             }
 
-            auto hasher = crypto::make_incremental_sha256();
+            auto hasher = ccf::crypto::make_incremental_sha256();
             hasher->update_hash(root_at_read.value().h);
 
-            request_digest = crypto::sha256(
+            request_digest = ccf::crypto::sha256(
               cose_ident.signature.data(), cose_ident.signature.size());
 
             hasher->update_hash(request_digest);
 
-            const crypto::Sha256Hash proposal_hash = hasher->finalise();
+            const ccf::crypto::Sha256Hash proposal_hash = hasher->finalise();
             proposal_id = proposal_hash.hex_str();
           }
 
@@ -445,7 +445,7 @@ namespace ccf::gov::endpoints
               return;
             }
 
-            js::CommonContext context(js::TxAccess::GOV_RO, &ctx.tx);
+            js::CommonContextWithLocalTx context(js::TxAccess::GOV_RO, &ctx.tx);
 
             auto validate_func = context.get_exported_function(
               constitution.value(),
@@ -456,7 +456,7 @@ namespace ccf::gov::endpoints
             auto validate_result = context.call_with_rt_options(
               validate_func,
               {proposal_arg},
-              &ctx.tx,
+              ctx.tx.template ro<ccf::JSEngine>(ccf::Tables::JSENGINE)->get(),
               js::core::RuntimeLimitsPolicy::NO_LOWER_THAN_DEFAULTS);
 
             // Handle error cases of validation

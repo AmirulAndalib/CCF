@@ -118,6 +118,7 @@ namespace ccf
       struct Redirections
       {
         RedirectionResolverConfig to_primary;
+        RedirectionResolverConfig to_backup;
 
         bool operator==(const Redirections& other) const = default;
       };
@@ -165,7 +166,7 @@ namespace ccf
     NodeInfoNetwork_v2::NetInterface::Redirections);
   DECLARE_JSON_REQUIRED_FIELDS(NodeInfoNetwork_v2::NetInterface::Redirections);
   DECLARE_JSON_OPTIONAL_FIELDS(
-    NodeInfoNetwork_v2::NetInterface::Redirections, to_primary);
+    NodeInfoNetwork_v2::NetInterface::Redirections, to_primary, to_backup);
   DECLARE_JSON_TYPE_WITH_OPTIONAL_FIELDS(NodeInfoNetwork_v2::NetInterface);
   DECLARE_JSON_REQUIRED_FIELDS(NodeInfoNetwork_v2::NetInterface, bind_address);
   DECLARE_JSON_OPTIONAL_FIELDS(
@@ -203,7 +204,7 @@ namespace ccf
   inline static std::pair<std::string, std::string> split_net_address(
     const NodeInfoNetwork::NetAddress& addr)
   {
-    auto [host, port] = nonstd::rsplit_1(addr, ":");
+    auto [host, port] = ccf::nonstd::rsplit_1(addr, ":");
     return std::make_pair(std::string(host), std::string(port));
   }
 
@@ -245,14 +246,14 @@ namespace ccf
       from_json(j, v2);
       nin = NodeInfoNetwork(v2);
     }
-    catch (const JsonParseError& jpe)
+    catch (const ccf::JsonParseError& jpe)
     {
       NodeInfoNetwork_v1 v1;
       try
       {
         from_json(j, v1);
       }
-      catch (const JsonParseError& _)
+      catch (const ccf::JsonParseError& _)
       {
         // If this also fails to parse as a v1, then rethrow the earlier error.
         // Configs should now be using v2, and this v1 parsing is just a

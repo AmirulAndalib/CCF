@@ -40,7 +40,7 @@ namespace ccf::gov::endpoints
 
   nlohmann::json produce_user_description(
     const ccf::UserId& user_id,
-    const crypto::Pem& user_cert,
+    const ccf::crypto::Pem& user_cert,
     ccf::UserInfo::ReadOnlyHandle* user_info_handle)
   {
     auto user = nlohmann::json::object();
@@ -85,9 +85,10 @@ namespace ccf::gov::endpoints
       case ccf::QuoteFormat::oe_sgx_v1:
       {
         quote_info["format"] = "OE_SGX_v1";
-        quote_info["quote"] = crypto::b64_from_raw(node_info.quote_info.quote);
+        quote_info["quote"] =
+          ccf::crypto::b64_from_raw(node_info.quote_info.quote);
         quote_info["endorsements"] =
-          crypto::b64_from_raw(node_info.quote_info.endorsements);
+          ccf::crypto::b64_from_raw(node_info.quote_info.endorsements);
         break;
       }
       case ccf::QuoteFormat::insecure_virtual:
@@ -100,12 +101,12 @@ namespace ccf::gov::endpoints
         quote_info["format"] = "AMD_SEV_SNP_v1";
         if (node_info.quote_info.uvm_endorsements.has_value())
         {
-          quote_info["uvmEndorsements"] =
-            crypto::b64_from_raw(node_info.quote_info.uvm_endorsements.value());
+          quote_info["uvmEndorsements"] = ccf::crypto::b64_from_raw(
+            node_info.quote_info.uvm_endorsements.value());
         }
         if (node_info.quote_info.endorsed_tcb.has_value())
         {
-          quote_info["endorsedTcb"] = crypto::b64_from_raw(
+          quote_info["endorsedTcb"] = ccf::crypto::b64_from_raw(
             ds::from_hex(node_info.quote_info.endorsed_tcb.value()));
         }
         break;
@@ -161,7 +162,7 @@ namespace ccf::gov::endpoints
           ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
           ctx.rpc_ctx->set_response_body(std::move(constitution.value()));
           ctx.rpc_ctx->set_response_header(
-            http::headers::CONTENT_TYPE,
+            ccf::http::headers::CONTENT_TYPE,
             http::headervalues::contenttype::JAVASCRIPT);
           return;
         }
@@ -466,31 +467,29 @@ namespace ccf::gov::endpoints
 
             auto jwt_keys_handle =
               ctx.tx.template ro<ccf::JwtPublicSigningKeys>(
-                ccf::Tables::JWT_PUBLIC_SIGNING_KEYS);
-            auto jwt_key_issuers_handle =
-              ctx.tx.template ro<ccf::JwtPublicSigningKeyIssuer>(
-                ccf::Tables::JWT_PUBLIC_SIGNING_KEY_ISSUER);
+                ccf::Tables::JWT_PUBLIC_SIGNING_KEYS_METADATA);
 
             jwt_keys_handle->foreach(
-              [&keys, jwt_key_issuers_handle](
-                const ccf::JwtKeyId& kid, const ccf::Cert& cert) {
-                auto key_info = nlohmann::json::object();
-
-                // cert is stored as DER - convert to PEM for API
-                const auto cert_pem = crypto::cert_der_to_pem(cert);
-                key_info["certificate"] = cert_pem.str();
-
-                const auto issuer = jwt_key_issuers_handle->get(kid);
-                if (issuer.has_value())
+              [&keys](
+                const ccf::JwtKeyId& k,
+                const std::vector<OpenIDJWKMetadata>& v) {
+                auto keys_info = nlohmann::json::array();
+                for (const auto& metadata : v)
                 {
-                  key_info["issuer"] = issuer.value();
-                }
-                else
-                {
-                  GOV_INFO_FMT("JWT kid '{}' has no associated issuer", kid);
+                  auto info = nlohmann::json::object();
+
+                  // cert is stored as DER - convert to PEM for API
+                  const auto cert_pem =
+                    ccf::crypto::cert_der_to_pem(metadata.cert);
+                  info["certificate"] = cert_pem.str();
+
+                  info["issuer"] = metadata.issuer;
+                  info["constraint"] = metadata.constraint;
+
+                  keys_info.push_back(info);
                 }
 
-                keys[kid] = key_info;
+                keys[k] = keys_info;
                 return true;
               });
 
@@ -645,7 +644,7 @@ namespace ccf::gov::endpoints
 
             user_certs_handle->foreach([&user_list, user_info_handle](
                                          const ccf::UserId& user_id,
-                                         const crypto::Pem& user_cert) {
+                                         const ccf::crypto::Pem& user_cert) {
               user_list.push_back(
                 produce_user_description(user_id, user_cert, user_info_handle));
               return true;

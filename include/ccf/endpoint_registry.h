@@ -5,7 +5,6 @@
 #include "ccf/ds/json_schema.h"
 #include "ccf/endpoint.h"
 #include "ccf/endpoint_context.h"
-#include "ccf/pal/locking.h"
 #include "ccf/rpc_context.h"
 #include "ccf/tx.h"
 
@@ -16,7 +15,7 @@
 #include <regex>
 #include <set>
 
-namespace kv
+namespace ccf::kv
 {
   class Consensus;
   class TxHistory;
@@ -37,6 +36,25 @@ namespace ccf::endpoints
     PathTemplatedEndpoint(const Endpoint& e) : Endpoint(e) {}
 
     PathTemplateSpec spec;
+  };
+
+  struct RequestCompletedEvent
+  {
+    std::string method = "";
+    // This contains the path template against which the request matched. For
+    // instance `/user/{user_id}` rather than `/user/Bob`. This should be safe
+    // to log, though doing so still reveals (to anyone with stdout access)
+    // exactly which endpoints were executed and when.
+    std::string dispatch_path = "";
+    int status = 0;
+    std::chrono::milliseconds exec_time{0};
+    size_t attempts = 0;
+  };
+
+  struct DispatchFailedEvent
+  {
+    std::string method = "";
+    int status = 0;
   };
 
   void default_locally_committed_func(
@@ -113,14 +131,6 @@ namespace ccf::endpoints
       std::string document_version = "0.0.1";
     } openapi_info;
 
-    struct Metrics
-    {
-      size_t calls = 0;
-      size_t errors = 0;
-      size_t failures = 0;
-      size_t retries = 0;
-    };
-
     template <typename T>
     bool get_path_param(
       const ccf::PathParams& params,
@@ -151,14 +161,8 @@ namespace ccf::endpoints
       std::map<RESTVerb, std::shared_ptr<PathTemplatedEndpoint>>>
       templated_endpoints;
 
-    ccf::pal::Mutex metrics_lock;
-    std::map<std::string, std::map<std::string, Metrics>> metrics;
-
-    EndpointRegistry::Metrics& get_metrics_for_request(
-      const std::string& method, const std::string& verb);
-
-    kv::Consensus* consensus = nullptr;
-    kv::TxHistory* history = nullptr;
+    ccf::kv::Consensus* consensus = nullptr;
+    ccf::kv::TxHistory* history = nullptr;
 
   public:
     EndpointRegistry(const std::string& method_prefix_) :
@@ -250,12 +254,12 @@ namespace ccf::endpoints
      * internally, so must be able to populate the document
      * with the supported endpoints however it defines them.
      */
-    virtual void build_api(nlohmann::json& document, kv::ReadOnlyTx&);
+    virtual void build_api(nlohmann::json& document, ccf::kv::ReadOnlyTx&);
 
     virtual void init_handlers();
 
     virtual EndpointDefinitionPtr find_endpoint(
-      kv::Tx&, ccf::RpcContext& rpc_ctx);
+      ccf::kv::Tx&, ccf::RpcContext& rpc_ctx);
 
     virtual void execute_endpoint(
       EndpointDefinitionPtr e, EndpointContext& args);
@@ -264,7 +268,7 @@ namespace ccf::endpoints
       EndpointDefinitionPtr e, CommandEndpointContext& args, const TxID& tx_id);
 
     virtual std::set<RESTVerb> get_allowed_verbs(
-      kv::Tx&, const ccf::RpcContext& rpc_ctx);
+      ccf::kv::Tx&, const ccf::RpcContext& rpc_ctx);
 
     virtual bool request_needs_root(const ccf::RpcContext& rpc_ctx);
 
@@ -274,17 +278,18 @@ namespace ccf::endpoints
 
     virtual void tick(std::chrono::milliseconds);
 
-    void set_consensus(kv::Consensus* c);
+    void set_consensus(ccf::kv::Consensus* c);
 
-    void set_history(kv::TxHistory* h);
+    void set_history(ccf::kv::TxHistory* h);
 
-    virtual void increment_metrics_calls(const EndpointDefinitionPtr& endpoint);
-    virtual void increment_metrics_errors(
-      const EndpointDefinitionPtr& endpoint);
-    virtual void increment_metrics_failures(
-      const EndpointDefinitionPtr& endpoint);
-    virtual void increment_metrics_retries(
-      const EndpointDefinitionPtr& endpoint);
+    // Override these methods to log or report request metrics.
+    virtual void handle_event_request_completed(
+      const ccf::endpoints::RequestCompletedEvent& event)
+    {}
+
+    virtual void handle_event_dispatch_failed(
+      const ccf::endpoints::DispatchFailedEvent& event)
+    {}
 
     virtual bool apply_uncommitted_tx_backpressure() const
     {

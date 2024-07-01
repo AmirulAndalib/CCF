@@ -62,7 +62,7 @@ namespace ccf
   }
 
   CommonEndpointRegistry::CommonEndpointRegistry(
-    const std::string& method_prefix_, ccfapp::AbstractNodeContext& context_) :
+    const std::string& method_prefix_, ccf::AbstractNodeContext& context_) :
     BaseEndpointRegistry(method_prefix_, context_)
   {}
 
@@ -277,30 +277,6 @@ namespace ccf
       .set_openapi_summary("OpenAPI schema")
       .install();
 
-    auto endpoint_metrics_fn = [this](auto&, nlohmann::json&&) {
-      EndpointMetrics out;
-      const auto result = get_metrics_v1(out);
-      if (result == ccf::ApiResult::OK)
-      {
-        return make_success(out);
-      }
-      else
-      {
-        return make_error(
-          HTTP_STATUS_INTERNAL_SERVER_ERROR,
-          ccf::errors::InternalError,
-          fmt::format("Error code: {}", ccf::api_result_to_str(result)));
-      }
-    };
-    make_command_endpoint(
-      "/api/metrics",
-      HTTP_GET,
-      json_command_adapter(endpoint_metrics_fn),
-      no_auth_required)
-      .set_auto_schema<void, EndpointMetrics>()
-      .set_openapi_summary("Usage metrics for endpoints")
-      .install();
-
     auto is_tx_committed =
       [this](ccf::View view, ccf::SeqNo seqno, std::string& error_reason) {
         return ccf::historical::is_tx_committed_v2(
@@ -309,13 +285,12 @@ namespace ccf
 
     auto get_receipt =
       [](auto& ctx, ccf::historical::StatePtr historical_state) {
-        const auto [pack, params] =
-          ccf::jsonhandler::get_json_params(ctx.rpc_ctx);
+        const auto params = ccf::jsonhandler::get_json_params(ctx.rpc_ctx);
 
         assert(historical_state->receipt);
         auto out = ccf::describe_receipt_v1(*historical_state->receipt);
         ctx.rpc_ctx->set_response_status(HTTP_STATUS_OK);
-        ccf::jsonhandler::set_response(out, ctx.rpc_ctx, pack);
+        ccf::jsonhandler::set_response(out, ctx.rpc_ctx);
       };
 
     make_read_only_endpoint(

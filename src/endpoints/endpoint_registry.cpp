@@ -173,18 +173,6 @@ namespace ccf::endpoints
     return spec;
   }
 
-  EndpointRegistry::Metrics& EndpointRegistry::get_metrics_for_request(
-    const std::string& method_, const std::string& verb)
-  {
-    auto substr_start = method_.find_first_not_of('/');
-    if (substr_start == std::string::npos)
-    {
-      substr_start = 0;
-    }
-    auto method = method_.substr(substr_start);
-    return metrics[method][verb];
-  }
-
   void default_locally_committed_func(
     CommandEndpointContext& ctx, const TxID& tx_id)
   {
@@ -316,7 +304,8 @@ namespace ccf::endpoints
     default_endpoint = std::move(tmp);
   }
 
-  void EndpointRegistry::build_api(nlohmann::json& document, kv::ReadOnlyTx&)
+  void EndpointRegistry::build_api(
+    nlohmann::json& document, ccf::kv::ReadOnlyTx&)
   {
     // Add common components:
     // - Descriptions of each kind of forwarding
@@ -401,7 +390,7 @@ namespace ccf::endpoints
   void EndpointRegistry::init_handlers() {}
 
   EndpointDefinitionPtr EndpointRegistry::find_endpoint(
-    kv::Tx&, ccf::RpcContext& rpc_ctx)
+    ccf::kv::Tx&, ccf::RpcContext& rpc_ctx)
   {
     auto method = rpc_ctx.get_method();
     auto endpoints_for_exact_method = fully_qualified_endpoints.find(method);
@@ -450,7 +439,7 @@ namespace ccf::endpoints
                 const auto& template_name =
                   endpoint->spec.template_component_names[i];
                 const auto& template_value = match[i + 1].str();
-                auto decoded_value = http::url_decode(template_value);
+                auto decoded_value = ::http::url_decode(template_value);
                 path_params[template_name] = template_value;
                 decoded_path_params[template_name] = decoded_value;
               }
@@ -509,7 +498,7 @@ namespace ccf::endpoints
   }
 
   std::set<RESTVerb> EndpointRegistry::get_allowed_verbs(
-    kv::Tx& tx, const ccf::RpcContext& rpc_ctx)
+    ccf::kv::Tx& tx, const ccf::RpcContext& rpc_ctx)
   {
     auto method = rpc_ctx.get_method();
 
@@ -567,49 +556,13 @@ namespace ccf::endpoints
   // Default implementation does nothing
   void EndpointRegistry::tick(std::chrono::milliseconds) {}
 
-  void EndpointRegistry::set_consensus(kv::Consensus* c)
+  void EndpointRegistry::set_consensus(ccf::kv::Consensus* c)
   {
     consensus = c;
   }
 
-  void EndpointRegistry::set_history(kv::TxHistory* h)
+  void EndpointRegistry::set_history(ccf::kv::TxHistory* h)
   {
     history = h;
-  }
-
-  void EndpointRegistry::increment_metrics_calls(
-    const endpoints::EndpointDefinitionPtr& endpoint)
-  {
-    std::lock_guard<ccf::pal::Mutex> guard(metrics_lock);
-    get_metrics_for_request(
-      endpoint->dispatch.uri_path, endpoint->dispatch.verb.c_str())
-      .calls++;
-  }
-
-  void EndpointRegistry::increment_metrics_errors(
-    const endpoints::EndpointDefinitionPtr& endpoint)
-  {
-    std::lock_guard<ccf::pal::Mutex> guard(metrics_lock);
-    get_metrics_for_request(
-      endpoint->dispatch.uri_path, endpoint->dispatch.verb.c_str())
-      .errors++;
-  }
-
-  void EndpointRegistry::increment_metrics_failures(
-    const endpoints::EndpointDefinitionPtr& endpoint)
-  {
-    std::lock_guard<ccf::pal::Mutex> guard(metrics_lock);
-    get_metrics_for_request(
-      endpoint->dispatch.uri_path, endpoint->dispatch.verb.c_str())
-      .failures++;
-  }
-
-  void EndpointRegistry::increment_metrics_retries(
-    const endpoints::EndpointDefinitionPtr& endpoint)
-  {
-    std::lock_guard<ccf::pal::Mutex> guard(metrics_lock);
-    get_metrics_for_request(
-      endpoint->dispatch.uri_path, endpoint->dispatch.verb.c_str())
-      .retries++;
   }
 }

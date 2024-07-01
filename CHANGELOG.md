@@ -5,6 +5,67 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [5.0.0-rc0]
+
+[5.0.0-rc0]: https://github.com/microsoft/CCF/releases/tag/ccf-5.0.0-rc0
+
+### Added
+
+- More public namespaces have been moved under `::ccf`
+  - `::ds` is now `ccf::ds`
+  - `::siphash` is now `ccf::siphash`
+  - `::threading` is now `ccf::threading`, and `ccf/ds/thread_ids.h` has moved to `ccf/threading/thread_ids.h`
+  - `::consensus` is now `ccf::consensus`
+  - `::tls` is now `ccf::tls`
+  - `::http` is now `ccf::http`
+  - `::nonstd` is now `ccf::nonstd`
+  - `::crypto` is now `ccf::crypto`
+  - `::kv` is now `ccf::kv`
+  - `::logger` is now `ccf::logger`
+  - `::ccfapp` is now `::ccf`
+- The `programmability` sample app now demonstrates how applications can define their own extensions, creating bindings between C++ and JS state, and allowing JS endpoints to call functions implemented in C++.
+- Introduce `DynamicJSEndpointRegistry::record_action_for_audit_v1` and `DynamicJSEndpointRegistry::check_action_not_replayed_v1` to allow an application making use of the programmability feature to easily implement auditability, and protect users allowed to update the application against replay attacks (#6285).
+- Endpoints now support a `ToBackup` redirection strategy, for requests which should never be executed on a primary. These must also be read-only. These are configured similar to `ToPrimary` endpoints, with a `to_backup` object (specifying by-role or statically-addressed targets) in each node's configuration.
+
+## Changed
+
+- Updated Open Enclave to [0.19.7](https://github.com/openenclave/openenclave/releases/tag/v0.19.7).
+
+### Removed
+
+- Removed the existing metrics endpoint and API (`GET /api/metrics`, `get_metrics_v1`). Stats for request execution can instead be gathered by overriding the `EndpointRegistry::handle_event_request_completed()` method.
+- Removed automatic msgpack support from JSON endpoint adapters, and related `include/ccf/serdes.h` file.
+
+## [5.0.0-dev18]
+
+[5.0.0-dev18]: https://github.com/microsoft/CCF/releases/tag/ccf-5.0.0-dev18
+
+### Added
+
+- Added TypeScript `TypedKvSet` and `ccfapp.typedKv<K>` to facilitate set handling from application code.
+- Added support for UVM endorsements signed with EC keys (#6231).
+- Updated Open Enclave to [0.19.6](https://github.com/openenclave/openenclave/releases/tag/v0.19.6).
+
+### Removed
+
+- Removed unused `openenclave.verifyOpenEnclaveEvidence` API from JS/TS
+
+### Changed
+
+- Added token.iss claim validation to JWT authentication (#5809). Must-knows:
+  - Supports both the [OpenID requirements](https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation) and the [Entra specification](https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens#validate-the-issuer) of it.
+  - All keys fetched after the upgrade will not work against tokens missing the 'iss' claim if the issuer has been specified in the .well-known/openid-configuration/.
+  - Due to an internal schema change, networks that are in the process of upgrading to this version may see inconsistent authorization behaviour while the network contains nodes of different versions (depending which node executes the auto-refresh, any nodes on the other version will not use any newly provided keys). We recommend a full upgrade to this version, removing any nodes on prior versions, followed by a key and issuer refresh.
+  - A future release will remove the old tables entirely. Until then, some redundant state will be retained in the ledger. This is tracked in [#6222](https://github.com/microsoft/CCF/issues/6222).
+
+## [5.0.0-dev17]
+
+[5.0.0-dev17]: https://github.com/microsoft/CCF/releases/tag/ccf-5.0.0-dev17
+
+### Added
+
+- Moved JS registry to public header `ccf/js/registry.h`. Apps should subclass `ccf::js::DynamicJSEndpointRegistry` to get similar behaviour to the existing JS Generic app.
+
 ## [5.0.0-dev16]
 
 [5.0.0-dev16]: https://github.com/microsoft/CCF/releases/tag/ccf-5.0.0-dev16

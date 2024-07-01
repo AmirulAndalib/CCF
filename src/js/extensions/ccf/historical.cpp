@@ -19,8 +19,8 @@ namespace ccf::js::extensions
     struct HistoricalHandle
     {
       ccf::historical::StatePtr state;
-      std::unique_ptr<kv::ReadOnlyTx> tx;
-      std::unordered_map<std::string, kv::untyped::Map::ReadOnlyHandle*>
+      std::unique_ptr<ccf::kv::ReadOnlyTx> tx;
+      std::unordered_map<std::string, ccf::kv::untyped::Map::ReadOnlyHandle*>
         kv_handles = {};
     };
     std::unordered_map<ccf::SeqNo, HistoricalHandle> historical_handles;
@@ -172,7 +172,7 @@ namespace ccf::js::extensions
       std::string sig_b64;
       try
       {
-        sig_b64 = crypto::b64_from_raw(receipt_out.signature);
+        sig_b64 = ccf::crypto::b64_from_raw(receipt_out.signature);
       }
       catch (const std::exception& e)
       {
@@ -305,7 +305,7 @@ namespace ccf::js::extensions
 
       if (hit->second == nullptr)
       {
-        kv::ReadOnlyTx* tx = it->second.tx.get();
+        ccf::kv::ReadOnlyTx* tx = it->second.tx.get();
         if (tx == nullptr)
         {
           LOG_FAIL_FMT("Can't rehydrate MapHandle - no transaction");
@@ -331,11 +331,23 @@ namespace ccf::js::extensions
       LOG_TRACE_FMT(
         "Looking for historical kv map '{}' at seqno {}", map_name, seqno);
 
-      // Ignore evaluated access permissions - all tables are read-only
-      const auto access_permission = MapAccessPermissions::READ_ONLY;
+      auto access_permission =
+        ccf::js::check_kv_map_access(jsctx.access, map_name);
+      std::string explanation =
+        ccf::js::explain_kv_map_access(access_permission, jsctx.access);
+
+      // If it's illegal, it stays illegal in historical lookup
+      if (access_permission != KVAccessPermissions::ILLEGAL)
+      {
+        // But otherwise, ignore evaluated access permissions - all tables are
+        // read-only in historical KV
+        access_permission = KVAccessPermissions::READ_ONLY;
+        explanation = "All tables are read-only during historical transaction.";
+      }
+
       auto handle_val =
         kvhelpers::create_kv_map_handle<get_map_handle_historical, nullptr>(
-          jsctx, map_name, access_permission);
+          jsctx, map_name, access_permission, explanation);
       if (JS_IsException(handle_val))
       {
         return -1;

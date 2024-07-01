@@ -13,17 +13,17 @@ namespace http
   class ResponderLookup
   {
   protected:
-    using ByStream =
-      std::unordered_map<http2::StreamId, std::shared_ptr<HTTPResponder>>;
+    using ByStream = std::
+      unordered_map<http2::StreamId, std::shared_ptr<ccf::http::HTTPResponder>>;
 
-    std::unordered_map<tls::ConnID, ByStream> all_responders;
+    std::unordered_map<::tls::ConnID, ByStream> all_responders;
 
     // Responder lookup is shared by all HTTP sessions
     ccf::pal::Mutex lock;
 
   public:
-    std::shared_ptr<HTTPResponder> lookup_responder(
-      tls::ConnID session_id, http2::StreamId stream_id)
+    std::shared_ptr<ccf::http::HTTPResponder> lookup_responder(
+      ::tls::ConnID session_id, http2::StreamId stream_id)
     {
       std::unique_lock<ccf::pal::Mutex> guard(lock);
       auto conn_it = all_responders.find(session_id);
@@ -41,15 +41,15 @@ namespace http
     }
 
     void add_responder(
-      tls::ConnID session_id,
+      ::tls::ConnID session_id,
       http2::StreamId stream_id,
-      std::shared_ptr<HTTPResponder> responder)
+      std::shared_ptr<ccf::http::HTTPResponder> responder)
     {
       std::unique_lock<ccf::pal::Mutex> guard(lock);
       all_responders[session_id][stream_id] = responder;
     }
 
-    void cleanup_responders(tls::ConnID session_id)
+    void cleanup_responders(::tls::ConnID session_id)
     {
       std::unique_lock<ccf::pal::Mutex> guard(lock);
       all_responders.erase(session_id);
